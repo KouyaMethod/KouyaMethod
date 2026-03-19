@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Kouya Method</title>
+<title>SOXL · Kouya Method</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -112,9 +112,7 @@ header h1 span{color:var(--ac)}
 .kv{font-size:17px;font-family:var(--mono);font-weight:600}
 .ks{font-size:10px;color:var(--t3);margin-top:3px;font-family:var(--mono)}
 
-/* mdd note */
-.mdd-note{background:rgba(56,189,248,.05);border:1px solid rgba(56,189,248,.15);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;color:var(--t2);margin-bottom:14px;line-height:1.7}
-.mdd-note strong{color:var(--ac)}
+
 
 /* chart */
 .cw2{background:var(--card);border:1px solid var(--b1);border-radius:7px;padding:14px 16px;margin-bottom:12px}
@@ -157,7 +155,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
 <!-- 헤더 -->
 <header>
-  <div class="logo">
+  <div>
     <div class="chip">SOXL · Kouya Method</div>
     <h1>SOXL <span>Daily Signal</span></h1>
   </div>
@@ -440,12 +438,16 @@ function simulate(series, capital, comm=0, initH=0, initAvg=0) {
 
   // 지표
   const EQ=daily.map(d=>d.equity), N=EQ.length, DT=daily.map(d=>d.date);
-  let peak=EQ[0], mdd=0, mPk=DT[0], mTr=DT[0], cPk=DT[0];
+  // MDD = (전체최고 - 전체최저) / 전체최고
+  const maxEQ=Math.max(...EQ), minEQ=Math.min(...EQ);
+  const mdd = -r2((maxEQ-minEQ)/maxEQ*100);
+  const mPk = DT[EQ.indexOf(maxEQ)];
+  const mTr = DT[EQ.indexOf(minEQ)];
+  // 드로우다운 차트용: running peak 방식
+  let _pk=EQ[0];
   const DD = EQ.map((eq,i) => {
-    if (eq > peak) { peak=eq; cPk=DT[i]; }
-    const dd = (eq/peak - 1)*100;
-    if (dd < mdd) { mdd=dd; mPk=cPk; mTr=DT[i]; }
-    return r2(dd);
+    if (eq > _pk) _pk=eq;
+    return r2((eq/_pk-1)*100);
   });
   const DR = EQ.slice(1).map((eq,i) => r2((eq/EQ[i]-1)*100));
   const monthly = {};
@@ -623,20 +625,6 @@ function renderBTResult(sim, series) {
     {lb:'승률',      v:m.wr+'%', c:m.wr>=50?'cg':'cr', s:`${m.win}승 ${m.lose}패`},
   ].map(k=>`<div class="kpi fu"><div class="kl">${k.lb}</div><div class="kv ${k.c}">${k.v}</div><div class="ks">${k.s}</div></div>`).join('');
 
-  // MDD 설명
-  const soxlMdd = (() => {
-    let pk=series[0].close, dd=0;
-    for(const p of series){ if(p.close>pk)pk=p.close; dd=Math.min(dd,(p.close/pk-1)*100); }
-    return r2(dd);
-  })();
-  const mddNote = `
-    <div class="mdd-note">
-      <strong>📌 MDD ${m.mdd.toFixed(2)}%가 작은 이유</strong><br>
-      같은 기간 <strong>SOXL 가격 자체의 MDD: ${soxlMdd.toFixed(2)}%</strong>에 비해 전략 MDD가 훨씬 작습니다.<br>
-      이는 Kouya Method의 핵심 특성 때문입니다 — 가격이 하락할수록 더 많이 매집해 평단을 낮추고,
-      반등 시 이익 실현하면서 <strong>총 자산(현금+주식 평가액)을 일정하게 유지</strong>합니다.
-      순수 SOXL 보유 대비 하락 방어력이 월등히 높으며, MDD가 작을수록 전략이 잘 작동하고 있다는 의미입니다.
-    </div>`;
 
   // 월별 히트맵
   const entries = Object.entries(sim.monthly).sort((a,b)=>a[0]<b[0]?-1:1);
@@ -651,7 +639,6 @@ function renderBTResult(sim, series) {
 
   document.getElementById('btResult').innerHTML = `
     <div class="kg">${kpis}</div>
-    ${mddNote}
     <div class="cw2">
       <div class="leg">
         <div class="li"><div class="ld" style="background:#38bdf8"></div>에쿼티</div>
