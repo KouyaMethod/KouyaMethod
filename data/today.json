@@ -1,0 +1,30 @@
+{
+  "generated_at": "초기 데이터 (GitHub Actions 실행 전)",
+  "date": "2026-02-12",
+  "close": 63.1,
+  "day_change": -7.27,
+  "cycle_start": 10000.0,
+  "avg_price": 0.0,
+  "holdings": 0,
+  "profit_pct": 0,
+  "orders": {
+    "buy": [
+      {
+        "price": 73.07,
+        "qty": 10,
+        "label": "BUY1"
+      },
+      {
+        "price": 62.91,
+        "qty": 11,
+        "label": "BUY2"
+      }
+    ],
+    "sell": []
+  },
+  "prev_sell2_price": 0,
+  "prev_sell2_qty": 0,
+  "prev_sell3_price": 0,
+  "prev_sell3_qty": 0,
+  "history": []
+}
