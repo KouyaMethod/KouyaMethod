@@ -281,6 +281,15 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <span class="hint">0.05 = 0.05%</span>
       </div>
       <div class="field">
+        <label>체결 방식</label>
+        <select id="cfgFillMode">
+          <option value="close">종가 (LOC)</option>
+          <option value="open">시가 (MOO)</option>
+          <option value="limit">지정가 (Limit)</option>
+        </select>
+        <span class="hint">종가: 당일 종가 체결 / 시가: 익일 시가 체결 / 지정가: 지정가 그대로 체결</span>
+      </div>
+      <div class="field">
         <label>투자 시작일</label>
         <input type="date" id="cfgStart">
       </div>
@@ -388,6 +397,7 @@ function getCurCfg(){
     start:    document.getElementById('cfgStart').value||FIRST,
     holdings: parseInt(document.getElementById('cfgHoldings').value)||0,
     avg:      parseFloat(document.getElementById('cfgAvg').value)||0,
+    fillMode: document.getElementById('cfgFillMode').value||'close',
     preset:   _currentPreset,
     params:   getCurParams(),
   };
@@ -398,6 +408,7 @@ function applyCfgToUI(s){
   document.getElementById('cfgStart').value    = s.start    ||FIRST;
   document.getElementById('cfgHoldings').value = s.holdings ||0;
   document.getElementById('cfgAvg').value      = s.avg      ||0;
+  document.getElementById('cfgFillMode').value = s.fillMode ||'close';
   document.getElementById('btComm').value      = s.comm     ||0.05;
   document.getElementById('btCap').value       = s.capital  ||10000;
   _currentPreset = s.preset||'baseline';
@@ -553,37 +564,94 @@ function recP(cs,cl,av,h,p2p=0,p2q=0,p3p=0,p3q=0,P={}){
   return{buys,sells};
 }
 
-function simulate(series,capital,comm=0,initH=0,initAvg=0,P={}){
-  // 종가 매매(LOC): 당일 종가 기준으로 주문 생성 및 체결
-  // 매수 지정가 >= 종가이면 매수 체결, 매도 지정가 <= 종가이면 매도 체결 (모두 종가로 체결)
+function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close'){
+  // fillMode: 'close'=종가(LOC), 'open'=익일시가(MOO), 'limit'=지정가 체결
   let cash=capital-initAvg*initH,h=initH,avg=initAvg,cs=capital,cycle=0;
   if(cash<0){cash=capital;h=initH;avg=initAvg;}
   let p2p=0,p2q=0,p3p=0,p3q=0;
+  // open모드: 전날 신호 → 익일 시가 체결을 위해 pending 저장
+  let pendingOrders=null;
   const trades=[],daily=[];
   for(let i=0;i<series.length;i++){
-    const{date,close}=series[i];
-    const res=recP(cs,close,avg,h,p2p,p2q,p3p,p3q,P);
-    let np2=0,nq2=0,np3=0,nq3=0;
-    // 매도: 지정가 <= 종가이면 체결 (종가로 체결)
-    for(let j=0;j<res.sells.length;j++){
-      const[sp,sq,sl]=res.sells[j];
-      if(sp<=close&&h>0){
-        const qty=Math.min(sq,h),ep=r2(close*(1-comm)),pnl=(ep-avg)*qty;
-        h-=qty;cash+=ep*qty;
-        trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
-        if(h===0){avg=0;cycle++;cs=cash;}
-      }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
+    const{date,open,close}=series[i];
+
+    // ── 시가 모드: 전날 pending 주문을 오늘 시가로 체결 ──
+    if(fillMode==='open'&&pendingOrders){
+      const ep_base=open||close; // 시가 없으면 종가 fallback
+      let np2=0,nq2=0,np3=0,nq3=0;
+      for(let j=0;j<pendingOrders.sells.length;j++){
+        const[sp,sq,sl]=pendingOrders.sells[j];
+        if(h>0){
+          const qty=Math.min(sq,h),ep=r2(ep_base*(1-comm)),pnl=(ep-avg)*qty;
+          h-=qty;cash+=ep*qty;
+          trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
+          if(h===0){avg=0;cycle++;cs=cash;}
+        }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
+      }
+      p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
+      for(const[bp,bq2,bl]of pendingOrders.buys){
+        if(cash>0){
+          const ep=r2(ep_base*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
+          if(qty<=0)continue;
+          const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
+          trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
+        }
+      }
+      pendingOrders=null;
     }
-    p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
-    // 매수: 지정가 >= 종가이면 체결 (종가로 체결)
-    for(const[bp,bq2,bl]of res.buys){
-      if(bp>=close&&cash>0){
-        const ep=r2(close*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
-        if(qty<=0)continue;
-        const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
-        trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
+
+    // 당일 종가 기준으로 오늘의 주문 생성
+    const res=recP(cs,close,avg,h,p2p,p2q,p3p,p3q,P);
+
+    if(fillMode==='open'){
+      // 시가 모드: 오늘 생성된 주문을 내일 시가에 체결하도록 pending
+      pendingOrders=res;
+    } else if(fillMode==='close'){
+      // 종가 모드(LOC): 지정가 조건 충족 시 당일 종가로 체결
+      let np2=0,nq2=0,np3=0,nq3=0;
+      for(let j=0;j<res.sells.length;j++){
+        const[sp,sq,sl]=res.sells[j];
+        if(sp<=close&&h>0){
+          const qty=Math.min(sq,h),ep=r2(close*(1-comm)),pnl=(ep-avg)*qty;
+          h-=qty;cash+=ep*qty;
+          trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
+          if(h===0){avg=0;cycle++;cs=cash;}
+        }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
+      }
+      p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
+      for(const[bp,bq2,bl]of res.buys){
+        if(bp>=close&&cash>0){
+          const ep=r2(close*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
+          if(qty<=0)continue;
+          const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
+          trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
+        }
+      }
+    } else {
+      // 지정가 모드(Limit): 지정가 조건 충족 시 지정가 그대로 체결
+      let np2=0,nq2=0,np3=0,nq3=0;
+      const{high:dayHigh,low:dayLow}=series[i];
+      const hi=dayHigh||close,lo=dayLow||close;
+      for(let j=0;j<res.sells.length;j++){
+        const[sp,sq,sl]=res.sells[j];
+        if(hi>=sp&&h>0){
+          const qty=Math.min(sq,h),ep=r2(sp*(1-comm)),pnl=(ep-avg)*qty;
+          h-=qty;cash+=ep*qty;
+          trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
+          if(h===0){avg=0;cycle++;cs=cash;}
+        }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
+      }
+      p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
+      for(const[bp,bq2,bl]of res.buys){
+        if(lo<=bp&&cash>0){
+          const ep=r2(bp*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
+          if(qty<=0)continue;
+          const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
+          trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
+        }
       }
     }
+
     daily.push({date,price:close,holdings:h,avg_price:r2(avg),cash:r2(cash),equity:r2(cash+h*close),profit_pct:r2(avg>0&&h>0?(close/avg-1)*100:0),cycle});
   }
   const last=daily[daily.length-1];
@@ -686,7 +754,11 @@ async function init(){
   }
 
   // 날짜 범위
-  ['sd','ed','cfgStart'].forEach(id=>{const el=document.getElementById(id);if(el){el.min=FIRST;el.max=LAST;}});
+  // 백테스트 날짜 범위는 PRICES 데이터 범위로 제한
+  ['sd','ed'].forEach(id=>{const el=document.getElementById(id);if(el){el.min=FIRST;el.max=LAST;}});
+  // 투자 시작일은 미래도 허용 (오늘 포함) - 없는 날짜면 runSim에서 fallback 처리
+  const cfgEl=document.getElementById('cfgStart');
+  if(cfgEl){cfgEl.min=FIRST;cfgEl.max='';}
   document.getElementById('sd').value=FIRST;
   document.getElementById('ed').value=LAST;
 
@@ -718,7 +790,7 @@ function runSim(s){
   }
   const series=PRICES.filter(p=>p.date>=startDate);
   if(!series.length){renderSignal(null);return;}
-  SIM=simulate(series,s.capital||10000,(s.comm||0)/100,s.holdings||0,s.avg||0,s.params||PRESETS.baseline);
+  SIM=simulate(series,s.capital||10000,(s.comm||0)/100,s.holdings||0,s.avg||0,s.params||PRESETS.baseline,s.fillMode||'close');
   renderSignal(SIM,series);
   renderTrades(SIM);
 }
