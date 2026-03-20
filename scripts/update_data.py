@@ -257,10 +257,42 @@ def generate_today(prices):
     print(f"  매도: {[(p,q,l) for p,q,l in sells]}")
 
 
+# ── HTML 정적 데이터 업데이트 ─────────────────────────────────────
+def update_html_prices(prices):
+    """index.html 안의 _RAW= 정적 데이터를 최신 prices로 교체"""
+    html_file = os.path.join(ROOT, "index.html")
+    if not os.path.exists(html_file):
+        print("index.html 없음, 스킵")
+        return
+
+    with open(html_file, encoding="utf-8") as f:
+        html = f.read()
+
+    # compact 형식: [date, open, high, low, close]
+    compact = [[p["date"], p["open"], p["high"], p["low"], p["close"]] for p in prices]
+    new_raw  = json.dumps(compact, separators=(",", ":"))
+
+    # _RAW=[ ... ]; 패턴 교체
+    import re
+    pattern = r'const _RAW=\[.*?\];'
+    replacement = f'const _RAW={new_raw};'
+
+    new_html, n = re.subn(pattern, replacement, html, flags=re.DOTALL)
+    if n == 0:
+        print("index.html에서 _RAW 패턴을 찾지 못했습니다")
+        return
+
+    with open(html_file, "w", encoding="utf-8") as f:
+        f.write(new_html)
+
+    print(f"index.html 정적 데이터 업데이트: {len(prices)}일")
+
+
 # ── 메인 ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("=== SOXL 데이터 업데이트 ===")
     os.makedirs(os.path.join(ROOT, "data"), exist_ok=True)
     prices = update_prices()
     generate_today(prices)
+    update_html_prices(prices)
     print("=== 완료 ===")
