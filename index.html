@@ -240,6 +240,14 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <label>수수료 (%, 편도)</label>
         <input type="number" id="btComm" value="0.05" min="0" max="1" step="0.01">
       </div>
+      <div class="field">
+        <label>체결 방식</label>
+        <select id="btFillMode">
+          <option value="close">종가 (LOC)</option>
+          <option value="open">시가 (MOO)</option>
+          <option value="limit">지정가 (Limit)</option>
+        </select>
+      </div>
       <div style="display:flex;align-items:flex-end;padding-bottom:0">
         <button class="btn btn-pri btn-full" id="rb" onclick="runBT()">
           <div class="sp"></div><span class="bt">▶ 실행</span>
@@ -783,7 +791,32 @@ function isRecent(d){const diff=(new Date()-new Date(d))/86400000;return diff<=(
 /* ══════ 시뮬 ══════ */
 function runSim(s){
   let startDate=s.start||FIRST;
-  // 시작일이 PRICES에 없거나 오늘 이후면 가장 가까운 이전 날짜로 fallback
+
+  // 시작일이 LAST보다 미래 → 아직 데이터 없음 = 처음 진입 케이스
+  // 백테스트 없이 마지막 데이터로 오늘 신호만 제시
+  if(startDate>LAST){
+    const last=PRICES[PRICES.length-1];
+    const prev=PRICES.length>=2?PRICES[PRICES.length-2]:last;
+    const close=last.close;
+    const P=s.params||PRESETS.baseline;
+    const cs=s.capital||10000;
+    // 보유 없음(처음 진입) 기준으로 주문 생성
+    const ord=recP(cs,close,0,s.holdings||0,0,0,0,0,P);
+    // SIM을 최소한의 구조로 만들어 renderSignal에 전달
+    SIM={
+      last:{date:last.date,price:close,holdings:s.holdings||0,avg_price:s.avg||0,
+            cash:cs,equity:cs+(s.holdings||0)*close,profit_pct:0,cycle:0},
+      lastOrd:ord,
+      cs_final:cs,
+      EQ:[cs],DT:[last.date],trades:[],daily:[],
+      m:{tr:0,cagr:0,mdd:0,sharpe:0,fin:cs,init:cs,nD:0,cy:0,nB:0,nS:0,win:0,lose:0,wr:0}
+    };
+    renderSignal(SIM,[prev,last]);
+    renderTrades(SIM);
+    return;
+  }
+
+  // 시작일이 PRICES에 없으면 가장 가까운 이전 날짜로 fallback
   if(!PRICES.find(p=>p.date===startDate)){
     const before=PRICES.filter(p=>p.date<startDate);
     startDate=before.length?before[before.length-1].date:FIRST;
@@ -856,14 +889,15 @@ function runBT(){
   const s_=document.getElementById('sd').value,e_=document.getElementById('ed').value;
   const cap=parseFloat(document.getElementById('btCap').value)||10000;
   const comm=(parseFloat(document.getElementById('btComm').value)||0)/100;
+  const fillMode=document.getElementById('btFillMode').value||'close';
   if(!s_||!e_||s_>e_){alert('날짜를 확인하세요.');return;}
   const series=PRICES.filter(p=>p.date>=s_&&p.date<=e_);
   if(series.length<5){alert('데이터 부족');return;}
-  const P=getCurParams();  // 현재 화면의 파라미터 바로 사용
+  const P=getCurParams();
   const btn=document.getElementById('rb');
   btn.classList.add('loading');btn.disabled=true;
   setTimeout(()=>{
-    BT_SIM=simulate(series,cap,comm,0,0,P);
+    BT_SIM=simulate(series,cap,comm,0,0,P,fillMode);
     renderBTResult(BT_SIM);
     renderBTTrades(BT_SIM);
     btn.classList.remove('loading');btn.disabled=false;
