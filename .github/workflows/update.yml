@@ -4,7 +4,7 @@ on:
   schedule:
     # 미국 장 마감(4pm ET = 21:00 UTC) 후 30분 → 21:30 UTC = 익일 06:30 KST
     # 평일(월~금)만 실행
-    - cron: '0 22 * * *'
+    - cron: '30 21 * * 1-5'
   workflow_dispatch:  # 수동 실행 가능
 
 permissions:
