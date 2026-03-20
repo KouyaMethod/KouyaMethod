@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-20 15:53 KST",
+  "generated_at": "2026-03-20 20:43 KST",
   "date": "2026-03-19",
   "close": 52.8201,
   "day_change": -2.22,
@@ -7,6 +7,11 @@
   "avg_price": 0.0,
   "holdings": 0,
   "profit_pct": 0,
+  "prev_sell2_price": 0,
+  "prev_sell2_qty": 0,
+  "prev_sell3_price": 0,
+  "prev_sell3_qty": 0,
+  "history": [],
   "orders": {
     "buy": [
       {
@@ -21,10 +26,5 @@
       }
     ],
     "sell": []
-  },
-  "prev_sell2_price": 0,
-  "prev_sell2_qty": 0,
-  "prev_sell3_price": 0,
-  "prev_sell3_qty": 0,
-  "history": []
+  }
 }
