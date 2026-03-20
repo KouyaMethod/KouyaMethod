@@ -1,8 +1,9 @@
 """
 scripts/update_data.py
-매일 7시 GitHub Actions에서 실행:
-  1. Yahoo Finance에서 SOXL 최신 가격 fetch
-  2. data/prices.json 업데이트
+매일 GitHub Actions에서 실행:
+  - 미국 장 마감(4pm ET = 21:00 UTC) 후 30분 → 21:30 UTC (평일 월~금)
+  1. Yahoo Finance에서 SOXL 최신 가격만 fetch (최근 10일, 새 데이터만 append)
+  2. data/prices.json 업데이트 (전체 정적 데이터 유지)
   3. 엔진으로 오늘 주문 계산 → data/today.json
 """
 
@@ -12,13 +13,12 @@ import urllib.request, urllib.error
 # ── 경로 설정 ─────────────────────────────────────────────────────
 ROOT        = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRICES_FILE = os.path.join(ROOT, "data", "prices.json")
-TODAY_FILE  = os.path.join(ROOT, "data",  "today.json")
+TODAY_FILE  = os.path.join(ROOT, "data", "today.json")
 
-# ── Yahoo Finance fetch ───────────────────────────────────────────
-def fetch_soxl(days=10):
-    """최근 N일 SOXL OHLCV 가져오기"""
-    end   = int(time.time())
-    start = end - days * 86400 * 2  # 여유있게 2배
+# ── Yahoo Finance fetch (최근 N일만) ──────────────────────────────
+def fetch_recent_soxl(days=10):
+    end   = int(time.time()) + 86400
+    start = end - (days + 5) * 86400
 
     url = (
         f"https://query1.finance.yahoo.com/v8/finance/chart/SOXL"
@@ -32,7 +32,7 @@ def fetch_soxl(days=10):
     for attempt in range(3):
         try:
             req  = urllib.request.Request(url, headers=headers)
-            resp = urllib.request.urlopen(req, timeout=15)
+            resp = urllib.request.urlopen(req, timeout=20)
             data = json.loads(resp.read())
             result = data["chart"]["result"][0]
 
@@ -57,46 +57,63 @@ def fetch_soxl(days=10):
                         "close":  round(c, 4),
                         "volume": int(v) if v else 0,
                     })
+
+            print(f"  Yahoo fetch 성공: {len(records)}일 데이터")
             return records
 
         except Exception as e:
             print(f"  fetch 시도 {attempt+1} 실패: {e}")
-            time.sleep(3)
+            if attempt < 2:
+                time.sleep(5)
 
+    print("  경고: 모든 fetch 시도 실패")
     return []
 
 
 # ── 가격 히스토리 업데이트 ─────────────────────────────────────────
 def update_prices():
-    # 기존 데이터 로드
+    prices = []
     if os.path.exists(PRICES_FILE):
         with open(PRICES_FILE) as f:
-            prices = json.load(f)
+            try:
+                prices = json.load(f)
+                print(f"기존 데이터 로드: {len(prices)}일")
+            except json.JSONDecodeError:
+                print("  경고: prices.json 파싱 실패, 빈 데이터로 시작")
+                prices = []
     else:
-        prices = []
+        print("prices.json 없음, 새로 생성")
 
     existing_dates = {p["date"] for p in prices}
-
-    # 최신 데이터 fetch
-    new_records = fetch_soxl(days=15)
+    new_records = fetch_recent_soxl(days=10)
     added = 0
+    skipped = 0
+
+    today_kst = datetime.datetime.now(
+        datetime.timezone(datetime.timedelta(hours=9))
+    ).strftime("%Y-%m-%d")
+
     for rec in new_records:
         if rec["date"] not in existing_dates:
+            if rec["date"] > today_kst:
+                print(f"  미래 날짜 스킵: {rec['date']}")
+                continue
             prices.append(rec)
             existing_dates.add(rec["date"])
             added += 1
+        else:
+            skipped += 1
 
     prices.sort(key=lambda x: x["date"])
 
     with open(PRICES_FILE, "w") as f:
         json.dump(prices, f, separators=(",", ":"))
 
-    print(f"가격 데이터: 총 {len(prices)}일, 신규 {added}일 추가")
+    print(f"가격 데이터: 총 {len(prices)}일 | 신규 {added}일 추가 | {skipped}일 중복 스킵")
     return prices
 
 
 # ── 무한매수법 엔진 ───────────────────────────────────────────────
-# (GitHub Actions에서만 실행, 공개되지 않음)
 def r2(v):
     return round(v * 100) / 100
 
@@ -179,14 +196,11 @@ def recommend(cs, close, avg, holdings, ps2p=0, ps2q=0, ps3p=0, ps3q=0):
 # ── 오늘 추천 생성 ─────────────────────────────────────────────────
 def generate_today(prices):
     if len(prices) < 2:
-        print("가격 데이터 부족")
+        print("가격 데이터 부족 (최소 2일 필요)")
         return
 
-    # 최신 종가
     latest = prices[-1]
-    today_str = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).strftime("%Y-%m-%d")
 
-    # data/today.json에서 이전 상태 로드
     state = {
         "cycle_start": 10000.0,
         "avg_price":   0.0,
@@ -199,12 +213,15 @@ def generate_today(prices):
     }
     if os.path.exists(TODAY_FILE):
         with open(TODAY_FILE) as f:
-            saved = json.load(f)
-            for k in ["cycle_start","avg_price","holdings",
-                      "prev_sell2_price","prev_sell2_qty",
-                      "prev_sell3_price","prev_sell3_qty","history"]:
-                if k in saved:
-                    state[k] = saved[k]
+            try:
+                saved = json.load(f)
+                for k in ["cycle_start", "avg_price", "holdings",
+                          "prev_sell2_price", "prev_sell2_qty",
+                          "prev_sell3_price", "prev_sell3_qty", "history"]:
+                    if k in saved:
+                        state[k] = saved[k]
+            except json.JSONDecodeError:
+                print("  경고: today.json 파싱 실패, 초기값 사용")
 
     cs   = state["cycle_start"]
     avg  = state["avg_price"]
@@ -219,80 +236,59 @@ def generate_today(prices):
 
     buys, sells = recommend(cs, close, avg, h, ps2p, ps2q, ps3p, ps3q)
 
-    # 등락률
     prev_close = prices[-2]["close"] if len(prices) >= 2 else close
-    day_change = (close / prev_close - 1) * 100
+    day_change = round((close / prev_close - 1) * 100, 2)
+
+    now_kst = datetime.datetime.now(
+        datetime.timezone(datetime.timedelta(hours=9))
+    ).strftime("%Y-%m-%d %H:%M KST")
 
     result = {
-        "generated_at": datetime.datetime.now(
-            datetime.timezone(datetime.timedelta(hours=9))
-        ).strftime("%Y-%m-%d %H:%M KST"),
-        "date":        latest["date"],
-        "close":       close,
-        "day_change":  round(day_change, 2),
-        "cycle_start": cs,
-        "avg_price":   avg,
-        "holdings":    h,
-        "profit_pct":  round(pct, 2),
-        "orders": {
-            "buy":  [{"price": p, "qty": q, "label": l} for p,q,l in buys],
-            "sell": [{"price": p, "qty": q, "label": l} for p,q,l in sells],
-        },
-        # 상태 carry-over (다음 실행을 위해 보존)
+        "generated_at":      now_kst,
+        "date":              latest["date"],
+        "close":             close,
+        "day_change":        day_change,
         "cycle_start":       cs,
         "avg_price":         avg,
         "holdings":          h,
+        "profit_pct":        round(pct, 2),
         "prev_sell2_price":  ps2p,
         "prev_sell2_qty":    ps2q,
         "prev_sell3_price":  ps3p,
         "prev_sell3_qty":    ps3q,
         "history":           state.get("history", []),
+        "orders": {
+            "buy":  [{"price": p, "qty": q, "label": l} for p, q, l in buys],
+            "sell": [{"price": p, "qty": q, "label": l} for p, q, l in sells],
+        },
     }
 
     with open(TODAY_FILE, "w") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
     print(f"오늘 추천 생성 완료: {latest['date']}, close=${close}")
-    print(f"  매수: {[(p,q,l) for p,q,l in buys]}")
-    print(f"  매도: {[(p,q,l) for p,q,l in sells]}")
-
-
-# ── HTML 정적 데이터 업데이트 ─────────────────────────────────────
-def update_html_prices(prices):
-    """index.html 안의 _RAW= 정적 데이터를 최신 prices로 교체"""
-    html_file = os.path.join(ROOT, "index.html")
-    if not os.path.exists(html_file):
-        print("index.html 없음, 스킵")
-        return
-
-    with open(html_file, encoding="utf-8") as f:
-        html = f.read()
-
-    # compact 형식: [date, open, high, low, close]
-    compact = [[p["date"], p["open"], p["high"], p["low"], p["close"]] for p in prices]
-    new_raw  = json.dumps(compact, separators=(",", ":"))
-
-    # _RAW=[ ... ]; 패턴 교체
-    import re
-    pattern = r'const _RAW=\[.*?\];'
-    replacement = f'const _RAW={new_raw};'
-
-    new_html, n = re.subn(pattern, replacement, html, flags=re.DOTALL)
-    if n == 0:
-        print("index.html에서 _RAW 패턴을 찾지 못했습니다")
-        return
-
-    with open(html_file, "w", encoding="utf-8") as f:
-        f.write(new_html)
-
-    print(f"index.html 정적 데이터 업데이트: {len(prices)}일")
+    print(f"  등락: {day_change:+.2f}%")
+    print(f"  매수: {[(p, q, l) for p, q, l in buys]}")
+    print(f"  매도: {[(p, q, l) for p, q, l in sells]}")
 
 
 # ── 메인 ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("=== SOXL 데이터 업데이트 ===")
+    print("=" * 50)
+    print("SOXL 데이터 업데이트")
+    print(f"실행 시각 (UTC): {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 50)
+
     os.makedirs(os.path.join(ROOT, "data"), exist_ok=True)
+
     prices = update_prices()
-    generate_today(prices)
-    update_html_prices(prices)
-    print("=== 완료 ===")
+
+    if prices:
+        generate_today(prices)
+    else:
+        print("오류: 가격 데이터 없음, today.json 생성 건너뜀")
+        sys.exit(1)
+
+    print("=" * 50)
+    print("완료!")
+    print("=" * 50)
