@@ -318,7 +318,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
       <div class="param-group" data-label="[B] BUY1 계수 (수익률 구간별)" id="pgB"></div>
       <div class="param-group" data-label="[C] SELL1 가격 배수" id="pgC"></div>
       <div class="param-group" data-label="[D] SELL2 가격 배수" id="pgD"></div>
-      <div class="param-group" data-label="[E·F] OHLC 추정 & 임계값" id="pgEF"></div>
+      <div class="param-group" data-label="[E·F] 임계값 설정" id="pgEF"></div>
     </div>
   </div>
 
@@ -335,7 +335,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <script>
 /* ══════ 상수 ══════ */
 const SKEY = 'kouya_v3';
-const PRESETS = {"baseline":{"cycle_qty_rate":0.07,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.9936,"b_gt_n1":0.995,"b_gt_n3":0.989,"b_gt_n6":0.9807,"b_gt_n10":0.96,"b_else":0.97,"s1_carry":1.006,"s1_gt10":1.0092,"s1_gt5":1.0088,"s1_gt1":1.007,"s1_default":1.007,"s1_avg_hi":1.002,"s2_gt3":1.006,"s2_lt_n1":1.003,"s2_default":1.002,"one_sell_hbq":1.5,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100,"ohlc_high_mult":1.015,"ohlc_low_mult":0.985},"balanced":{"cycle_qty_rate":0.08,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.99,"b_gt_n1":0.993,"b_gt_n3":0.989,"b_gt_n6":0.9807,"b_gt_n10":0.96,"b_else":0.97,"s1_carry":1.006,"s1_gt10":1.0092,"s1_gt5":1.0088,"s1_gt1":1.007,"s1_default":1.012,"s1_avg_hi":1.002,"s2_gt3":1.006,"s2_lt_n1":1.003,"s2_default":1.002,"one_sell_hbq":2.2,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100,"ohlc_high_mult":1.015,"ohlc_low_mult":0.985},"aggressive":{"cycle_qty_rate":0.07,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.98,"b_gt5":0.99,"b_gt1":0.985,"b_gt_n1":0.993,"b_gt_n3":0.987,"b_gt_n6":0.97,"b_gt_n10":0.95,"b_else":0.96,"s1_carry":1.003,"s1_gt10":1.015,"s1_gt5":1.012,"s1_gt1":1.007,"s1_default":1.012,"s1_avg_hi":1.005,"s2_gt3":1.005,"s2_lt_n1":1.003,"s2_default":1.005,"one_sell_hbq":1.5,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100,"ohlc_high_mult":1.015,"ohlc_low_mult":0.985}};
+const PRESETS = {"baseline":{"cycle_qty_rate":0.07,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.9936,"b_gt_n1":0.995,"b_gt_n3":0.989,"b_gt_n6":0.9807,"b_gt_n10":0.96,"b_else":0.97,"s1_carry":1.006,"s1_gt10":1.0092,"s1_gt5":1.0088,"s1_gt1":1.007,"s1_default":1.007,"s1_avg_hi":1.002,"s2_gt3":1.006,"s2_lt_n1":1.003,"s2_default":1.002,"one_sell_hbq":1.5,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100},"balanced":{"cycle_qty_rate":0.08,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.99,"b_gt_n1":0.993,"b_gt_n3":0.989,"b_gt_n6":0.9807,"b_gt_n10":0.96,"b_else":0.97,"s1_carry":1.006,"s1_gt10":1.0092,"s1_gt5":1.0088,"s1_gt1":1.007,"s1_default":1.012,"s1_avg_hi":1.002,"s2_gt3":1.006,"s2_lt_n1":1.003,"s2_default":1.002,"one_sell_hbq":2.2,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100},"aggressive":{"cycle_qty_rate":0.07,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.98,"b_gt5":0.99,"b_gt1":0.985,"b_gt_n1":0.993,"b_gt_n3":0.987,"b_gt_n6":0.97,"b_gt_n10":0.95,"b_else":0.96,"s1_carry":1.003,"s1_gt10":1.015,"s1_gt5":1.012,"s1_gt1":1.007,"s1_default":1.012,"s1_avg_hi":1.005,"s2_gt3":1.005,"s2_lt_n1":1.003,"s2_default":1.005,"one_sell_hbq":1.5,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100}};
 const PRESET_DESC = {
   baseline:   '원본 파라미터. CQR=7%, SELL1=1.007. 보수적이고 안정적.',
   balanced:   '★ 권장. CQR=8%, SELL1=1.012, 분할매도 임계 확대. 모든 구간 샤프 향상. (2022~: +877%, Sharpe 10.89)',
@@ -363,8 +363,6 @@ const PMETA = {
   s2_gt3:     {l:'S2 pct>3%',  d:'수익 3% SELL2', g:'D', s:.001,mn:1.001,mx:1.02},
   s2_lt_n1:   {l:'S2 pct<-1%', d:'손실 1% SELL2', g:'D', s:.001,mn:1.001,mx:1.01},
   s2_default: {l:'S2 기본값',  d:'기본 SELL2',    g:'D', s:.001,mn:1.001,mx:1.01},
-  ohlc_high_mult: {l:'OHLC 고가',    d:'당일 고가 추정 배수',      g:'EF',s:.001,mn:1.001,mx:1.05},
-  ohlc_low_mult:  {l:'OHLC 저가',    d:'당일 저가 추정 배수',      g:'EF',s:.001,mn:.95, mx:.999},
   one_sell_hbq:   {l:'단일매도 h/bq', d:'이 미만이면 전량매도',     g:'EF',s:.1,  mn:1.0, mx:3.0},
   one_sell_pct:   {l:'단일매도 수익%',d:'이 이상이면 전량매도',     g:'EF',s:.5,  mn:3.0, mx:15.0},
   carry_pct:      {l:'carry 손실%',  d:'이 미만 손실이면 carry',  g:'EF',s:.5,  mn:1.0, mx:10.0},
@@ -556,30 +554,31 @@ function recP(cs,cl,av,h,p2p=0,p2q=0,p3p=0,p3q=0,P={}){
 }
 
 function simulate(series,capital,comm=0,initH=0,initAvg=0,P={}){
-  const hm=P.ohlc_high_mult||1.015,lm=P.ohlc_low_mult||.985;
+  // 종가 매매(LOC): 당일 종가 기준으로 주문 생성 및 체결
+  // 매수 지정가 >= 종가이면 매수 체결, 매도 지정가 <= 종가이면 매도 체결 (모두 종가로 체결)
   let cash=capital-initAvg*initH,h=initH,avg=initAvg,cs=capital,cycle=0;
   if(cash<0){cash=capital;h=initH;avg=initAvg;}
   let p2p=0,p2q=0,p3p=0,p3q=0;
   const trades=[],daily=[];
   for(let i=0;i<series.length;i++){
-    const{date,close}=series[i],prev=i>0?series[i-1].close:close;
-    const high=Math.max(prev,close)*hm,low=Math.min(prev,close)*lm;
+    const{date,close}=series[i];
     const res=recP(cs,close,avg,h,p2p,p2q,p3p,p3q,P);
     let np2=0,nq2=0,np3=0,nq3=0;
+    // 매도: 지정가 <= 종가이면 체결 (종가로 체결)
     for(let j=0;j<res.sells.length;j++){
       const[sp,sq,sl]=res.sells[j];
-      if(high>=sp&&h>0){
-        const qty=Math.min(sq,h),ep=r2(sp*(1-comm)),pnl=(ep-avg)*qty;
+      if(sp<=close&&h>0){
+        const qty=Math.min(sq,h),ep=r2(close*(1-comm)),pnl=(ep-avg)*qty;
         h-=qty;cash+=ep*qty;
         trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
         if(h===0){avg=0;cycle++;cs=cash;}
       }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
     }
     p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
+    // 매수: 지정가 >= 종가이면 체결 (종가로 체결)
     for(const[bp,bq2,bl]of res.buys){
-      const isUp=bp>close*1.02;
-      if((isUp?high>=bp:low<=bp)&&cash>0){
-        const ep=r2(bp*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
+      if(bp>=close&&cash>0){
+        const ep=r2(close*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
         if(qty<=0)continue;
         const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
         trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
@@ -711,7 +710,13 @@ function isRecent(d){const diff=(new Date()-new Date(d))/86400000;return diff<=(
 
 /* ══════ 시뮬 ══════ */
 function runSim(s){
-  const series=PRICES.filter(p=>p.date>=(s.start||FIRST));
+  let startDate=s.start||FIRST;
+  // 시작일이 PRICES에 없거나 오늘 이후면 가장 가까운 이전 날짜로 fallback
+  if(!PRICES.find(p=>p.date===startDate)){
+    const before=PRICES.filter(p=>p.date<startDate);
+    startDate=before.length?before[before.length-1].date:FIRST;
+  }
+  const series=PRICES.filter(p=>p.date>=startDate);
   if(!series.length){renderSignal(null);return;}
   SIM=simulate(series,s.capital||10000,(s.comm||0)/100,s.holdings||0,s.avg||0,s.params||PRESETS.baseline);
   renderSignal(SIM,series);
