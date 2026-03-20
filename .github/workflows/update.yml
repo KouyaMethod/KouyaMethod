@@ -2,10 +2,11 @@ name: Daily SOXL Update
 
 on:
   schedule:
-    # 미국 장 마감(4pm ET = 21:00 UTC) 후 30분 → 21:30 UTC = 익일 06:30 KST
-    # 평일(월~금)만 실행
+    # 서머타임(EDT, 약 3월~11월): 4pm EDT = 20:00 UTC → +30분 = 20:30 UTC
+    - cron: '30 20 * * 1-5'
+    # 겨울시간(EST, 약 11월~3월): 4pm EST = 21:00 UTC → +30분 = 21:30 UTC
     - cron: '30 21 * * 1-5'
-  workflow_dispatch:  # 수동 실행 가능
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,8 +14,9 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -28,7 +30,7 @@ jobs:
       - name: Fetch SOXL data & generate recommendations
         run: python scripts/update_data.py
 
-      - name: Commit & Push
+      - name: Commit & Push updated data
         run: |
           git config --global user.name  "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
