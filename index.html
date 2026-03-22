@@ -108,6 +108,9 @@ h1 span{color:var(--ac)}
 .oq{font-size:11px;font-family:var(--mono);color:var(--t3);background:var(--b1);padding:2px 6px;border-radius:3px}
 .no-order{padding:13px;font-family:var(--mono);font-size:11px;color:var(--t3);text-align:center}
 
+.calc-box{background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);border-radius:6px;padding:10px 14px;margin-bottom:16px;font-family:var(--mono);font-size:11px;color:var(--t1);line-height:1.6}
+.calc-box strong{color:var(--pu)}
+
 .stabs{display:flex;border-bottom:1px solid var(--b1)}
 .stab{font-size:11px;font-family:var(--mono);letter-spacing:.06em;padding:9px 14px;cursor:pointer;color:var(--t3);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .13s;white-space:nowrap}
 .stab.active{color:var(--ac);border-color:var(--ac)}
@@ -319,8 +322,8 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </div>
     <div style="font-size:10px; color:var(--t3); margin-top:8px; line-height:1.4">
-      * <b>알고리즘 수식:</b> (과거 N-1일의 합) * 배수 / (N - 배수)<br>
-      * 장 시작 전 <b>미리 LOC 지정가</b>를 산출하여 당일 종가에 도달하면 체결되는 논리입니다.
+      * <b>알고리즘 예측 수식:</b> (과거 N-1일의 합계) * 배수 / (N - 배수)<br>
+      * 장 시작 전 <b>미리 LOC 지정가를 산출</b>하며 매수와 매도 주문이 동시에 걸립니다.
     </div>
   </div>
 
@@ -670,18 +673,19 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
       let S = 0;
       for(let j = last_prices.length - (N - 1); j < last_prices.length; j++) S += last_prices[j];
       
-      // 수학적 도출 공식: 예측 타겟 = (합계 * 멀티플) / (N - 멀티플)
+      // 수학적 예측 공식: 타겟가 = (합계 * 멀티플) / (N - 멀티플)
       target_price = r2((S * mult) / (N - mult));
 
       if (days_held >= (P.stop_loss_days || 8)) {
         pending_stop = true;
         s1 = dO; sLabel = 'STOP_LOSS (시가매도)';
       } else {
+        // 매수/매도 동시에 동일한 타겟가로 세팅!
         if (splits_used < (P.splits || 7)) {
           pending_buy = target_price; b1 = target_price; bLabel = `BUY (${splits_used+1}/${P.splits||7})`;
         }
         if (h > 0) {
-          pending_sell = target_price; s1 = target_price; sLabel = 'SELL (전량)';
+          pending_sell = target_price; s1 = target_price; sLabel = 'SELL (전량 익절)';
         }
       }
     }
@@ -696,27 +700,9 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
       trades.push({date, type:'SELL', label:sLabel, price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
     } else {
       
-      // 매도 실행
-      if (pending_sell && h > 0) {
-        let executed = false, ep = pending_sell;
-        // LOC 매도: 실제 종가가 타겟보다 높거나 같으면 종가에 체결됨
-        if (fillMode === 'close' && dC >= pending_sell) { executed = true; ep = dC; }
-        else if (fillMode === 'limit' && dH >= pending_sell) { executed = true; }
-        else if (fillMode === 'open') { executed = true; ep = dO; }
-
-        if (executed) {
-          let qty = h;
-          let unit_rev = ep * (1-comm);
-          let rev = r2(unit_rev * qty), pnl = r2((unit_rev - avg) * qty);
-          h = 0; cash += rev; cycle++; splits_used = 0; days_held = 0;
-          trades.push({date, type:'SELL', label:sLabel, price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
-        }
-      }
-
-      // 매수 실행
+      // 1. 매수 실행 (지정가에 도달하거나 종가가 낮으면)
       if (pending_buy && splits_used < (P.splits || 7)) {
         let executed = false, ep = pending_buy;
-        // LOC 매수: 실제 종가가 타겟보다 낮거나 같으면 종가에 체결됨
         if (fillMode === 'close' && dC <= pending_buy) { executed = true; ep = dC; }
         else if (fillMode === 'limit' && dL <= pending_buy) { executed = true; }
         else if (fillMode === 'open') { executed = true; ep = dO; }
@@ -733,6 +719,22 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
           }
         }
       }
+
+      // 2. 매도 실행 (지정가에 도달하거나 종가가 높으면 전량 매도)
+      if (pending_sell && h > 0) {
+        let executed = false, ep = pending_sell;
+        if (fillMode === 'close' && dC >= pending_sell) { executed = true; ep = dC; }
+        else if (fillMode === 'limit' && dH >= pending_sell) { executed = true; }
+        else if (fillMode === 'open') { executed = true; ep = dO; }
+
+        if (executed) {
+          let qty = h;
+          let unit_rev = ep * (1-comm);
+          let rev = r2(unit_rev * qty), pnl = r2((unit_rev - avg) * qty);
+          h = 0; cash += rev; cycle++; splits_used = 0; days_held = 0;
+          trades.push({date, type:'SELL', label:sLabel, price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
+        }
+      }
     }
 
     if (h > 0) days_held++; else days_held = 0;
@@ -740,13 +742,17 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
     last_prices.push(dC);
     if(last_prices.length > N - 1) last_prices.shift();
 
-    // 💡 UI 표시를 위해 "내일의 주문"을 미리 계산 (today.json 호환용)
+    // 💡 UI 표시용 내일 주문 계산 및 수학적 수식 문자열 생성
     let next_b1 = 0, next_s1 = 0, next_bLabel = '', next_sLabel = '';
+    let calc_str = null;
+
     if (last_prices.length >= N - 1) {
       let S_next = 0;
       for(let j = last_prices.length - (N - 1); j < last_prices.length; j++) S_next += last_prices[j];
       let next_target = r2((S_next * mult) / (N - mult));
       
+      calc_str = `(과거 ${N-1}일 합 <strong>${r2(S_next)}</strong> × ${mult}) / (${N} - ${mult}) = <strong>$${next_target}</strong>`;
+
       if (days_held >= (P.stop_loss_days || 8)) {
         next_s1 = dC; next_sLabel = 'STOP_LOSS (내일 시가매도)';
       } else {
@@ -754,14 +760,14 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
           next_b1 = next_target; next_bLabel = `BUY (${splits_used+1}/${P.splits||7})`;
         }
         if (h > 0) {
-          next_s1 = next_target; next_sLabel = 'SELL (전량)';
+          next_s1 = next_target; next_sLabel = 'SELL (전량 익절)';
         }
       }
     }
 
     let buys = next_b1 > 0 ? [[next_b1, Math.floor((capital/(P.splits||7))/(next_b1*(1+comm))), next_bLabel]] : [];
     let sells = next_s1 > 0 ? [[next_s1, h, next_sLabel]] : [];
-    let lastOrd = { buys, sells };
+    let lastOrd = { buys, sells, calc_str };
 
     daily.push({date, price:dC, holdings:h, avg_price:r2(avg), cash:r2(cash), equity:r2(cash + h*dC), profit_pct:r2(avg>0&&h>0?(dC/avg-1)*100:0), cycle, lastOrd});
   }
@@ -823,7 +829,7 @@ async function init(){
       document.getElementById('updatedAt').textContent=todayData.generated_at||L;
     }
 
-    const CACHE_STORE = 'soxl-prices-v5';
+    const CACHE_STORE = 'soxl-prices-v6';
     let raw = null;
     if('caches' in window){
       try{
@@ -898,7 +904,7 @@ function runSim(s){
       SIM = simulateKouya(series, s.capital||10000, safeComm/100, s.holdings||0, s.avg||0, s.params||PRESETS.baseline, s.fillMode||'close');
     }
 
-    renderSignal(SIM,series);
+    renderSignal(SIM,series, s.strategy);
     renderTrades(SIM);
   } catch(err) {
     document.getElementById('todayCard').innerHTML=`<div class="lo" style="color:var(--rd)">⚠ 시스템 계산 오류 발생<br><small>${err.message}</small></div>`;
@@ -906,7 +912,7 @@ function runSim(s){
   }
 }
 
-function renderSignal(sim,series){
+function renderSignal(sim,series, strategy){
   if(!sim){document.getElementById('todayCard').innerHTML='<div class="lo"><span>데이터 없음</span></div>';return;}
   const last=sim.last,orders=sim.lastOrd;
   const close=last.price,prev=series&&series.length>=2?series[series.length-2].close:close;
@@ -917,11 +923,18 @@ function renderSignal(sim,series){
   (orders.sells||[]).forEach(([p,q,l])=>{sellH+=`<div class="oi"><span class="ol">${l}</span><div style="display:flex;align-items:center;gap:7px"><span class="op2 sell">$${p.toFixed(2)}</span><span class="oq">${q}주</span></div></div>`;});
   if(!sellH)sellH='<div class="no-order">보유 없음 — 매도 없음</div>';
   
-  const stratName = document.getElementById('cfgStrategy').value === 'day3' ? `🎯 ${document.getElementById('p3_ma_days').value}일 종가 예측 매매 시그널` : '📅 Kouya 매매 신호';
+  const stratName = strategy === 'day3' ? `🎯 ${document.getElementById('p3_ma_days').value}일 종가 예측 매매 시그널` : '📅 Kouya 매매 신호';
+  
+  // N일 종가 매매법일 경우 계산식을 UI에 표시
+  let calcHtml = '';
+  if (strategy === 'day3' && orders.calc_str) {
+    calcHtml = `<div class="calc-box">💡 <b>예측 목표가(LOC) 산출 공식:</b><br>${orders.calc_str}</div>`;
+  }
 
   document.getElementById('todayCard').innerHTML=`
     <div class="tc-title">${stratName} — ${last.date}</div>
     <div class="price-row"><div class="pm">$${close.toFixed(2)}</div><div class="pch ${chgCls}">${chg>=0?'+':''}${chg.toFixed(2)}%</div></div>
+    ${calcHtml}
     <div class="stat-grid">
       <div class="stat"><div class="sl">사이클 원금</div><div class="sv cw">$${(sim.cs_final||0).toLocaleString()}</div></div>
       <div class="stat"><div class="sl">평단가</div><div class="sv">${last.avg_price>0?'$'+last.avg_price:'—'}</div></div>
@@ -931,8 +944,8 @@ function renderSignal(sim,series){
       <div class="stat"><div class="sl">총 자산</div><div class="sv cw">$${last.equity.toLocaleString()}</div></div>
     </div>
     <div class="orders-grid">
-      <div class="op"><div class="oh buy">📈 매수 주문 (Limit)</div>${buyH}</div>
-      <div class="op"><div class="oh sell">📉 매도 주문 (Limit)</div>${sellH}</div>
+      <div class="op"><div class="oh buy">📈 매수 예약 (매도와 동일가)</div>${buyH}</div>
+      <div class="op"><div class="oh sell">📉 매도 예약 (전량)</div>${sellH}</div>
     </div>`;
 }
 
