@@ -322,6 +322,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <button class="pc-btn"        id="pc-open_opt"   onclick="applyPreset('open_opt',this)">★ 시가 최적</button>
         <button class="pc-btn"        id="pc-limit_opt"  onclick="applyPreset('limit_opt',this)">★ 지정가 최적</button>
         <button class="pc-btn"        id="pc-custom"     style="display:none" onclick="applyPreset('custom',this)">커스텀</button>
+        <button class="pc-btn" id="pc-holy_grail" style="border-color:var(--pu); color:var(--pu); font-weight:bold" onclick="applyPreset('holy_grail',this)">🔥 홀리 그레일(최적)</button>
       </div>
       <div id="presetDesc" style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:8px;padding:8px 12px;background:#0e1117;border-radius:4px;border-left:2px solid var(--pu);line-height:1.7"></div>
     </div>
@@ -353,7 +354,32 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <script>
 /* ══════ 상수 ══════ */
 const SKEY = 'kouya_v3';
-const PRESETS = {"baseline":{"cycle_qty_rate":0.07,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.9936,"b_gt_n1":0.995,"b_gt_n3":0.989,"b_gt_n6":0.9807,"b_gt_n10":0.96,"b_else":0.97,"s1_carry":1.006,"s1_gt10":1.0092,"s1_gt5":1.0088,"s1_gt1":1.007,"s1_default":1.007,"s1_avg_hi":1.002,"s2_gt3":1.006,"s2_lt_n1":1.003,"s2_default":1.002,"one_sell_hbq":1.5,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100},"balanced":{"cycle_qty_rate":0.08,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.99,"b_gt_n1":0.993,"b_gt_n3":0.989,"b_gt_n6":0.9807,"b_gt_n10":0.96,"b_else":0.97,"s1_carry":1.006,"s1_gt10":1.0092,"s1_gt5":1.0088,"s1_gt1":1.007,"s1_default":1.012,"s1_avg_hi":1.002,"s2_gt3":1.006,"s2_lt_n1":1.003,"s2_default":1.002,"one_sell_hbq":2.2,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100},"aggressive":{"cycle_qty_rate":0.07,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.98,"b_gt5":0.99,"b_gt1":0.985,"b_gt_n1":0.993,"b_gt_n3":0.987,"b_gt_n6":0.97,"b_gt_n10":0.95,"b_else":0.96,"s1_carry":1.003,"s1_gt10":1.015,"s1_gt5":1.012,"s1_gt1":1.007,"s1_default":1.012,"s1_avg_hi":1.005,"s2_gt3":1.005,"s2_lt_n1":1.003,"s2_default":1.005,"one_sell_hbq":1.5,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100},"close_opt":{"buy1_high_factor":1.158,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.9936,"b_hbq_penalty":0.00332,"b_hbq_max":0.025,"s1_carry":1.006,"s1_gt5":1.0088,"s1_avg_hi":1.002,"s2_lt_n1":1.003,"s2_gt3":1.006,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100,"cycle_qty_rate":0.06,"buy2_factor":0.996,"b_gt_n1":0.992,"b_gt_n3":0.987,"b_gt_n6":0.9807,"b_gt_n10":0.96,"b_else":0.97,"s1_default":1.012,"s1_gt1":1.007,"s1_gt10":1.0092,"one_sell_hbq":1.8,"s2_default":1.002},"open_opt":{"buy1_high_factor":1.158,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.9936,"b_hbq_penalty":0.00332,"b_hbq_max":0.025,"s1_carry":1.006,"s1_gt5":1.0088,"s1_avg_hi":1.002,"s2_lt_n1":1.003,"s2_gt3":1.006,"one_sell_pct":6.0,"carry_pct":6.0,"carry_min_hold":100,"cycle_qty_rate":0.07,"buy2_factor":0.996,"b_gt_n1":0.995,"b_gt_n3":0.987,"b_gt_n6":0.98,"b_gt_n10":0.96,"b_else":0.97,"s1_default":1.008,"s1_gt1":1.008,"s1_gt10":1.01,"one_sell_hbq":2.0,"s2_default":1.003},"limit_opt":{"buy1_high_factor":1.158,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.9936,"b_hbq_penalty":0.00332,"b_hbq_max":0.025,"s1_carry":1.006,"s1_gt5":1.0088,"s1_avg_hi":1.002,"s2_lt_n1":1.003,"s2_gt3":1.007,"one_sell_pct":7.0,"carry_pct":4.0,"carry_min_hold":100,"cycle_qty_rate":0.07,"buy2_factor":0.997,"b_gt_n1":0.993,"b_gt_n3":0.988,"b_gt_n6":0.978,"b_gt_n10":0.95,"b_else":0.965,"s1_default":1.01,"s1_gt1":1.008,"s1_gt10":1.011,"one_sell_hbq":2.2,"s2_default":1.002}};
+const PRESETS = {"baseline":{"cycle_qty_rate":0.07,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.9936,"b_gt_n1":0.995,"b_gt_n3":0.989,"b_gt_n6":0.9807,"b_gt_n10":0.96,"b_else":0.97,"s1_carry":1.006,"s1_gt10":1.0092,"s1_gt5":1.0088,"s1_gt1":1.007,"s1_default":1.007,"s1_avg_hi":1.002,"s2_gt3":1.006,"s2_lt_n1":1.003,"s2_default":1.002,"one_sell_hbq":1.5,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100},"balanced":{"cycle_qty_rate":0.08,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.99,"b_gt_n1":0.993,"b_gt_n3":0.989,"b_gt_n6":0.9807,"b_gt_n10":0.96,"b_else":0.97,"s1_carry":1.006,"s1_gt10":1.0092,"s1_gt5":1.0088,"s1_gt1":1.007,"s1_default":1.012,"s1_avg_hi":1.002,"s2_gt3":1.006,"s2_lt_n1":1.003,"s2_default":1.002,"one_sell_hbq":2.2,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100},"aggressive":{"cycle_qty_rate":0.07,"buy1_high_factor":1.158,"buy2_factor":0.997,"b_gt12":0.98,"b_gt5":0.99,"b_gt1":0.985,"b_gt_n1":0.993,"b_gt_n3":0.987,"b_gt_n6":0.97,"b_gt_n10":0.95,"b_else":0.96,"s1_carry":1.003,"s1_gt10":1.015,"s1_gt5":1.012,"s1_gt1":1.007,"s1_default":1.012,"s1_avg_hi":1.005,"s2_gt3":1.005,"s2_lt_n1":1.003,"s2_default":1.005,"one_sell_hbq":1.5,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100},"close_opt":{"buy1_high_factor":1.158,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.9936,"b_hbq_penalty":0.00332,"b_hbq_max":0.025,"s1_carry":1.006,"s1_gt5":1.0088,"s1_avg_hi":1.002,"s2_lt_n1":1.003,"s2_gt3":1.006,"one_sell_pct":7.0,"carry_pct":5.0,"carry_min_hold":100,"cycle_qty_rate":0.06,"buy2_factor":0.996,"b_gt_n1":0.992,"b_gt_n3":0.987,"b_gt_n6":0.9807,"b_gt_n10":0.96,"b_else":0.97,"s1_default":1.012,"s1_gt1":1.007,"s1_gt10":1.0092,"one_sell_hbq":1.8,"s2_default":1.002},"open_opt":{"buy1_high_factor":1.158,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.9936,"b_hbq_penalty":0.00332,"b_hbq_max":0.025,"s1_carry":1.006,"s1_gt5":1.0088,"s1_avg_hi":1.002,"s2_lt_n1":1.003,"s2_gt3":1.006,"one_sell_pct":6.0,"carry_pct":6.0,"carry_min_hold":100,"cycle_qty_rate":0.07,"buy2_factor":0.996,"b_gt_n1":0.995,"b_gt_n3":0.987,"b_gt_n6":0.98,"b_gt_n10":0.96,"b_else":0.97,"s1_default":1.008,"s1_gt1":1.008,"s1_gt10":1.01,"one_sell_hbq":2.0,"s2_default":1.003},"limit_opt":{"buy1_high_factor":1.158,"b_gt12":0.995,"b_gt5":0.9897,"b_gt1":0.9936,"b_hbq_penalty":0.00332,"b_hbq_max":0.025,"s1_carry":1.006,"s1_gt5":1.0088,"s1_avg_hi":1.002,"s2_lt_n1":1.003,"s2_gt3":1.007,"one_sell_pct":7.0,"carry_pct":4.0,"carry_min_hold":100,"cycle_qty_rate":0.07,"buy2_factor":0.997,"b_gt_n1":0.993,"b_gt_n3":0.988,"b_gt_n6":0.978,"b_gt_n10":0.95,"b_else":0.965,"s1_default":1.01,"s1_gt1":1.008,"s1_gt10":1.011,"one_sell_hbq":2.2,"s2_default":1.002},"holy_grail": {
+    "cycle_qty_rate": 0.055,
+    "buy1_high_factor": 1.158,
+    "buy2_factor": 0.995,
+    "b_gt12": 0.995,
+    "b_gt5": 0.9897,
+    "b_gt1": 0.9936,
+    "b_gt_n1": 0.992,
+    "b_gt_n3": 0.985,
+    "b_gt_n6": 0.97,
+    "b_gt_n10": 0.94,
+    "b_else": 0.92,
+    "s1_carry": 1.006,
+    "s1_gt10": 1.015,
+    "s1_gt5": 1.012,
+    "s1_gt1": 1.008,
+    "s1_default": 1.01,
+    "s1_avg_hi": 1.003,
+    "s2_gt3": 1.008,
+    "s2_lt_n1": 1.003,
+    "s2_default": 1.003,
+    "one_sell_hbq": 1.8,
+    "one_sell_pct": 6.0,
+    "carry_pct": 5.0,
+    "carry_min_hold": 100
+  }};
 const PRESET_DESC = {
   baseline:   '원본 파라미터. CQR=7%, SELL1=1.007. 보수적이고 안정적.',
   balanced:   'CQR=8%, SELL1=1.012, 분할매도 임계 확대.',
@@ -500,7 +526,7 @@ function applyPreset(name,el){
   refreshPresetUI();
 }
 function refreshPresetUI(){
-  ['baseline','balanced','aggressive','close_opt','open_opt','limit_opt','custom'].forEach(n=>{
+  ['baseline','balanced','aggressive','close_opt','open_opt','limit_opt','holy_grail','custom'].forEach(n=>{
     const el=document.getElementById('pc-'+n);
     if(el) el.classList.toggle('active',n===_currentPreset);
   });
