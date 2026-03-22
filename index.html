@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>SOXL · Kouya Method</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -392,6 +393,7 @@ let PRICES=[], FIRST='', LAST='', SIM=null, BT_SIM=null;
 let _currentPreset='baseline', _trFilter='all';
 
 /* ══════ 설정 저장/로드 ══════ */
+// comm 기본값을 0으로 완벽 고정
 function defSettings(){
   return{capital:10000,comm:0,start:'',holdings:0,avg:0,preset:'baseline',params:{...PRESETS.baseline}};
 }
@@ -401,12 +403,14 @@ function loadCfg(){
 function saveCfgData(s){localStorage.setItem(SKEY,JSON.stringify(s));}
 
 function getCurCfg(){
+  // 빈칸이거나 올바르지 않은 값일 때 에러 방지용 안전 장치 추가
+  const getNum = (id, fb) => isNaN(parseFloat(document.getElementById(id).value)) ? fb : parseFloat(document.getElementById(id).value);
   return{
-    capital:  parseFloat(document.getElementById('cfgCapital').value)||10000,
-    comm:     parseFloat(document.getElementById('cfgComm').value)||0,
+    capital:  getNum('cfgCapital', 10000),
+    comm:     getNum('cfgComm', 0),
     start:    document.getElementById('cfgStart').value||FIRST,
     holdings: parseInt(document.getElementById('cfgHoldings').value)||0,
-    avg:      parseFloat(document.getElementById('cfgAvg').value)||0,
+    avg:      getNum('cfgAvg', 0),
     fillMode: document.getElementById('cfgFillMode').value||'close',
     preset:   _currentPreset,
     params:   getCurParams(),
@@ -414,6 +418,7 @@ function getCurCfg(){
 }
 function applyCfgToUI(s){
   document.getElementById('cfgCapital').value  = s.capital  ||10000;
+  // 기존의 잘못된 fallback 연산을 없애고 0을 확실히 보장
   document.getElementById('cfgComm').value     = s.comm !== undefined ? s.comm : 0;
   document.getElementById('cfgStart').value    = s.start    ||FIRST;
   document.getElementById('cfgHoldings').value = s.holdings ||0;
@@ -505,7 +510,6 @@ function refreshPresetUI(){
   if(cc) cc.style.display=_currentPreset==='custom'?'inline-flex':'none';
   const d=document.getElementById('presetDesc');
   if(d) d.textContent=PRESET_DESC[_currentPreset]||'';
-  // 백테스트 태그
   const tag=document.getElementById('btParamTag');
   if(tag) tag.textContent=`파라미터: ${_currentPreset}`;
 }
@@ -522,8 +526,8 @@ function saveCfg(){
   saveCfgData(s);
   showToast('✓ 설정 저장됨');
   runSim(s);
-  document.getElementById('btComm').value=s.comm !== undefined ? s.comm : 0;
-  document.getElementById('btCap').value=s.capital;
+  document.getElementById('btComm').value = s.comm !== undefined ? s.comm : 0;
+  document.getElementById('btCap').value = s.capital;
 }
 function resetCfg(){
   if(!confirm('모든 설정을 초기값으로 되돌릴까요?'))return;
@@ -606,9 +610,12 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
         for(const[bp,bq2,bl]of pendingOrders.buys){
           if(cash>0){
             const raw_price=ep_base, unit_cost=raw_price*(1+comm);
+            if(unit_cost<=0) continue; // 무한대 에러 방지
             const qty=Math.min(bq2,Math.floor(cash/unit_cost));
             if(qty<=0)continue;
-            const cost=r2(unit_cost*qty); avg=(avg*h+cost)/(h+qty); h+=qty; cash-=cost;
+            const cost=r2(unit_cost*qty); 
+            avg = (h+qty)>0 ? (avg*h+cost)/(h+qty) : 0; 
+            h+=qty; cash-=cost;
             trades.push({date,type:'BUY',label:bl,price:raw_price,qty,cost,avg_after:r2(avg),holdings_after:h});
           }
         }
@@ -630,9 +637,12 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
         for(const[bp,bq2,bl]of pendingOrders.buys){
           if(bp>=close&&cash>0){ 
             const raw_price=close, unit_cost=raw_price*(1+comm);
+            if(unit_cost<=0) continue;
             const qty=Math.min(bq2,Math.floor(cash/unit_cost));
             if(qty<=0)continue;
-            const cost=r2(unit_cost*qty); avg=(avg*h+cost)/(h+qty); h+=qty; cash-=cost;
+            const cost=r2(unit_cost*qty); 
+            avg = (h+qty)>0 ? (avg*h+cost)/(h+qty) : 0; 
+            h+=qty; cash-=cost;
             trades.push({date,type:'BUY',label:bl,price:raw_price,qty,cost,avg_after:r2(avg),holdings_after:h});
           }
         }
@@ -654,9 +664,12 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
         for(const[bp,bq2,bl]of pendingOrders.buys){
           if(lo<=bp&&cash>0){ 
             const raw_price=bp, unit_cost=raw_price*(1+comm);
+            if(unit_cost<=0) continue;
             const qty=Math.min(bq2,Math.floor(cash/unit_cost));
             if(qty<=0)continue;
-            const cost=r2(unit_cost*qty); avg=(avg*h+cost)/(h+qty); h+=qty; cash-=cost;
+            const cost=r2(unit_cost*qty); 
+            avg = (h+qty)>0 ? (avg*h+cost)/(h+qty) : 0; 
+            h+=qty; cash-=cost;
             trades.push({date,type:'BUY',label:bl,price:raw_price,qty,cost,avg_after:r2(avg),holdings_after:h});
           }
         }
@@ -669,4 +682,334 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
   }
   
   const last=daily[daily.length-1];
-  const lastOrd=last?recP(cs,last.price,
+  const lastOrd=last?recP(cs,last.price,last.avg_price,last.holdings,p2p,p2q,p3p,p3q,P):{buys:[],sells:[]};
+  const EQ=daily.map(d=>d.equity),N=EQ.length,DT=daily.map(d=>d.date);
+  
+  // 연산 오류 발생(NaN)으로 인해 프로그램 전체가 멈추는 현상 완벽 차단
+  const validEQ = EQ.filter(v => !isNaN(v));
+  const maxEQ = validEQ.length > 0 ? Math.max(...validEQ) : 0;
+  const minEQ = validEQ.length > 0 ? Math.min(...validEQ) : 0;
+  
+  const mdd= maxEQ > 0 ? -r2((maxEQ-minEQ)/maxEQ*100) : 0;
+  const maxIdx = EQ.indexOf(maxEQ);
+  const minIdx = EQ.indexOf(minEQ);
+  const mPk = maxIdx >= 0 ? DT[maxIdx] : '';
+  const mTr = minIdx >= 0 ? DT[minIdx] : '';
+  
+  let _pk=EQ[0]||0;
+  const DD=EQ.map((eq)=>{if(eq>_pk)_pk=eq;return _pk>0 ? r2((eq/_pk-1)*100) : 0;});
+  const DR=EQ.slice(1).map((eq,i)=>(EQ[i]>0 ? r2((eq/EQ[i]-1)*100) : 0));
+  
+  const monthly={};
+  daily.forEach(d=>{
+    const ym=d.date.slice(0,7);
+    if(!monthly[ym])monthly[ym]={sEq:d.equity,eEq:d.equity,sCl:d.price,eCl:d.price};
+    monthly[ym].eEq=d.equity; monthly[ym].eCl=d.price;
+  });
+  
+  const init=capital,fin=EQ[N-1]||init;
+  const sells=trades.filter(t=>t.type==='SELL'),pnls=sells.map(t=>t.pnl||0);
+  const win=pnls.filter(p=>p>0).length,lose=pnls.filter(p=>p<=0).length;
+  const avgR=DR.reduce((a,b)=>a+b,0)/Math.max(DR.length,1)/100;
+  const stdR=Math.sqrt(DR.reduce((s,v)=>s+(v/100-avgR)**2,0)/Math.max(DR.length-1,1));
+  const sharpe=stdR>0?r2(avgR/stdR*Math.sqrt(252)):0;
+  
+  return{m:{tr:r2((fin/init-1)*100),cagr:init>0&&fin>0?r2(((fin/init)**(252/Math.max(N,1))-1)*100):0,mdd,mPk,mTr,sharpe,fin:r2(fin),init,nD:N,cy:cycle,nB:trades.filter(t=>t.type==='BUY').length,nS:sells.length,win,lose,wr:r2(win/Math.max(pnls.length,1)*100)},EQ,DT,DD,DR,trades,daily,monthly,last,lastOrd,cs_final:cs};
+}
+
+/* ══════ 초기화 ══════ */
+Chart.defaults.color='#64748b';Chart.defaults.borderColor='#1a2133';
+Chart.defaults.font.family="'IBM Plex Mono',monospace";Chart.defaults.font.size=10;
+const CI={};
+
+async function init(){
+  try{
+    let todayData = null;
+    try{
+      const res=await fetch('data/today.json?t='+Date.now());
+      if(res.ok) todayData=await res.json();
+    }catch{}
+
+    if(todayData){
+      const L=todayData.date||'';
+      document.getElementById('liveDot').className='dot'+(isRecent(L)?'':' stale');
+      document.getElementById('updatedAt').textContent=todayData.generated_at||L;
+    }
+
+    const pricesCacheKey = todayData?.date || 'nodate';
+    const CACHE_STORE = 'soxl-prices-v1';
+
+    let raw = null;
+    if('caches' in window){
+      try{
+        const cache = await caches.open(CACHE_STORE);
+        const cachedRes = await cache.match('prices-' + pricesCacheKey);
+        if(cachedRes){
+          raw = await cachedRes.json();
+        } else {
+          document.getElementById('todayCard').innerHTML=
+            '<div class="lo"><div class="sp" style="display:inline-block"></div> <span style="color:var(--t2)">데이터 로딩 중...</span></div>';
+          const res=await fetch('data/prices.json');
+          if(!res.ok)throw new Error('prices.json 로드 실패 ('+res.status+')');
+          raw = await res.json();
+          const keys = await cache.keys();
+          for(const k of keys) await cache.delete(k);
+          await cache.put('prices-'+pricesCacheKey, new Response(JSON.stringify(raw)));
+        }
+      } catch(cacheErr){
+        const res=await fetch('data/prices.json');
+        if(!res.ok)throw new Error('prices.json 로드 실패 ('+res.status+')');
+        raw = await res.json();
+      }
+    } else {
+      const res=await fetch('data/prices.json');
+      if(!res.ok)throw new Error('prices.json 로드 실패 ('+res.status+')');
+      raw = await res.json();
+    }
+
+    PRICES=raw.map(p=>Array.isArray(p)
+      ?{date:p[0],open:p[1],high:p[2],low:p[3],close:p[4]}
+      :{date:p.date,open:p.open||p.close,high:p.high||p.close,low:p.low||p.close,close:p.close});
+    FIRST=PRICES[0].date;LAST=PRICES[PRICES.length-1].date;
+    
+    if(!todayData){
+      document.getElementById('updatedAt').textContent=LAST;
+      document.getElementById('liveDot').className='dot'+(isRecent(LAST)?'':' stale');
+    }
+
+    ['sd','ed'].forEach(id=>{const el=document.getElementById(id);if(el){el.min=FIRST;el.max=LAST;}});
+    const cfgEl=document.getElementById('cfgStart');
+    if(cfgEl){cfgEl.min=FIRST;cfgEl.max='';}
+    document.getElementById('sd').value=FIRST;
+    document.getElementById('ed').value=LAST;
+
+    initParamUI();
+
+    const s=loadCfg();
+    if(!s.start)s.start=FIRST;
+    applyCfgToUI(s);
+    updDI();
+
+    renderPriceChart();
+    runSim(s);
+
+  }catch(e){
+    document.getElementById('todayCard').innerHTML=
+      '<div class="lo" style="color:var(--rd)">⚠ '+e.message+'<br><small style=\'margin-top:6px\'>GitHub Pages 배포 후 data/prices.json이 있어야 합니다</small></div>';
+  }
+}
+
+function isRecent(d){const diff=(new Date()-new Date(d))/86400000;return diff<=(new Date().getDay()===1?4:2);}
+
+/* ══════ 시뮬레이터 실행 ══════ */
+function runSim(s){
+  try{
+    let startDate=s.start||FIRST;
+
+    if(startDate>LAST){
+      const last=PRICES[PRICES.length-1];
+      const prev=PRICES.length>=2?PRICES[PRICES.length-2]:last;
+      const close=last.close;
+      const P=s.params||PRESETS.baseline;
+      const cs=s.capital||10000;
+      const ord=recP(cs,close,0,s.holdings||0,0,0,0,0,P);
+      SIM={
+        last:{date:last.date,price:close,holdings:s.holdings||0,avg_price:s.avg||0,
+              cash:cs,equity:cs+(s.holdings||0)*close,profit_pct:0,cycle:0},
+        lastOrd:ord, cs_final:cs, EQ:[cs],DT:[last.date],trades:[],daily:[],
+        m:{tr:0,cagr:0,mdd:0,sharpe:0,fin:cs,init:cs,nD:0,cy:0,nB:0,nS:0,win:0,lose:0,wr:0}
+      };
+      renderSignal(SIM,[prev,last]);
+      renderTrades(SIM);
+      return;
+    }
+
+    if(!PRICES.find(p=>p.date===startDate)){
+      const before=PRICES.filter(p=>p.date<startDate);
+      startDate=before.length?before[before.length-1].date:FIRST;
+    }
+    const series=PRICES.filter(p=>p.date>=startDate);
+    if(!series.length){renderSignal(null);return;}
+    
+    // 수수료 파싱 방어 (빈칸 또는 에러시 0으로)
+    const safeComm = (s.comm !== undefined && !isNaN(s.comm)) ? s.comm : 0;
+    
+    SIM=simulate(series,s.capital||10000, safeComm/100, s.holdings||0, s.avg||0, s.params||PRESETS.baseline, s.fillMode||'close');
+    renderSignal(SIM,series);
+    renderTrades(SIM);
+  } catch(err) {
+    document.getElementById('todayCard').innerHTML=
+      `<div class="lo" style="color:var(--rd)">⚠ 시스템 계산 오류 발생<br><small style='margin-top:6px'>${err.message}</small></div>`;
+    console.error("Simulation error:", err);
+  }
+}
+
+/* ══════ 시그널 ══════ */
+function renderSignal(sim,series){
+  if(!sim){document.getElementById('todayCard').innerHTML='<div class="lo"><span>데이터 없음</span></div>';return;}
+  const last=sim.last,orders=sim.lastOrd;
+  const close=last.price,prev=series&&series.length>=2?series[series.length-2].close:close;
+  const chg=(close/prev-1)*100,chgCls=chg>0?'up':chg<0?'dn':'flat';
+  const profCls=last.profit_pct>0?'cg':last.profit_pct<0?'cr':'cy';
+  let buyH='',sellH='';
+  (orders.buys||[]).forEach(([p,q,l])=>{buyH+=`<div class="oi"><span class="ol">${l}</span><div style="display:flex;align-items:center;gap:7px"><span class="op2 buy">$${p.toFixed(2)}</span><span class="oq">${q}주</span></div></div>`;});
+  (orders.sells||[]).forEach(([p,q,l])=>{sellH+=`<div class="oi"><span class="ol">${l}</span><div style="display:flex;align-items:center;gap:7px"><span class="op2 sell">$${p.toFixed(2)}</span><span class="oq">${q}주</span></div></div>`;});
+  if(!sellH)sellH='<div class="no-order">보유 없음 — 매도 없음</div>';
+  document.getElementById('todayCard').innerHTML=`
+    <div class="tc-title">📅 오늘의 매매 신호 — ${last.date}</div>
+    <div class="price-row"><div class="pm">$${close.toFixed(2)}</div><div class="pch ${chgCls}">${chg>=0?'+':''}${chg.toFixed(2)}%</div></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="sl">사이클 원금</div><div class="sv cw">$${(sim.cs_final||0).toLocaleString()}</div></div>
+      <div class="stat"><div class="sl">평단가</div><div class="sv">${last.avg_price>0?'$'+last.avg_price:'—'}</div></div>
+      <div class="stat"><div class="sl">보유</div><div class="sv ca">${last.holdings}주</div></div>
+      <div class="stat"><div class="sl">손익</div><div class="sv ${profCls}">${last.profit_pct?(last.profit_pct>=0?'+':'')+last.profit_pct.toFixed(2)+'%':'—'}</div></div>
+      <div class="stat"><div class="sl">현금</div><div class="sv">$${last.cash.toLocaleString()}</div></div>
+      <div class="stat"><div class="sl">총 자산</div><div class="sv cw">$${last.equity.toLocaleString()}</div></div>
+    </div>
+    <div class="orders-grid">
+      <div class="op"><div class="oh buy">📈 매수 주문</div>${buyH}</div>
+      <div class="op"><div class="oh sell">📉 매도 주문</div>${sellH}</div>
+    </div>`;
+}
+
+/* ══════ 거래내역 ══════ */
+function renderTrades(sim){
+  let tr=[...sim.trades].reverse();
+  if(_trFilter==='BUY')tr=tr.filter(t=>t.type==='BUY');
+  else if(_trFilter==='SELL')tr=tr.filter(t=>t.type==='SELL');
+  else if(_trFilter==='win')tr=tr.filter(t=>t.type==='SELL'&&(t.pnl||0)>0);
+  else if(_trFilter==='lose')tr=tr.filter(t=>t.type==='SELL'&&(t.pnl||0)<=0);
+  if(!tr.length){document.getElementById('trContent').innerHTML='<div class="ph"><div class="ico">📋</div><div>거래 없음</div></div>';return;}
+  const rows=tr.map(t=>{const b=t.type==='BUY';
+    const ph=t.pnl!=null?(t.pnl>=0?`<span class="pos">+$${t.pnl.toFixed(2)}</span>`:`<span class="neg">-$${Math.abs(t.pnl).toFixed(2)}</span>`):'—';
+    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}</td><td style="color:${b?'var(--gr)':'var(--rd)'}">$${t.price.toFixed(2)}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td><td style="color:var(--t3)">$${(b?t.avg_after:t.avg_before||0).toFixed(3)}</td></tr>`;
+  }).join('');
+  const total=sim.trades.length;
+  document.getElementById('trContent').innerHTML=`
+    <div class="fb">
+      <div class="fbn ${_trFilter==='all'?'active':''}" onclick="ftf('all',this)">전체(${total})</div>
+      <div class="fbn ${_trFilter==='BUY'?'active':''}" onclick="ftf('BUY',this)">매수</div>
+      <div class="fbn ${_trFilter==='SELL'?'active':''}" onclick="ftf('SELL',this)">매도</div>
+      <div class="fbn ${_trFilter==='win'?'active':''}" onclick="ftf('win',this)">수익</div>
+      <div class="fbn ${_trFilter==='lose'?'active':''}" onclick="ftf('lose',this)">손실</div>
+    </div>
+    <div class="tw"><div class="th2"><span>${tr.length}건</span><span style="color:var(--t3);font-size:10px">최신순</span></div>
+      <div style="max-height:460px;overflow-y:auto">
+        <table><thead><tr><th>날짜</th><th>구분</th><th>레이블</th><th>체결가</th><th>수량</th><th>금액</th><th>PnL</th><th>평단</th></tr></thead>
+        <tbody>${rows}</tbody></table></div></div>`;
+}
+function ftf(f,el){_trFilter=f;document.querySelectorAll('.fbn').forEach(b=>b.classList.remove('active'));el.classList.add('active');if(SIM)renderTrades(SIM);}
+
+/* ══════ 백테스트 ══════ */
+function runBT(){
+  const s_=document.getElementById('sd').value,e_=document.getElementById('ed').value;
+  const cap=parseFloat(document.getElementById('btCap').value)||10000;
+  let comm=parseFloat(document.getElementById('btComm').value);
+  if(isNaN(comm)) comm = 0;
+  
+  const fillMode=document.getElementById('btFillMode').value||'close';
+  if(!s_||!e_||s_>e_){alert('날짜를 확인하세요.');return;}
+  const series=PRICES.filter(p=>p.date>=s_&&p.date<=e_);
+  if(series.length<5){alert('데이터 부족');return;}
+  const P=getCurParams();
+  const btn=document.getElementById('rb');
+  btn.classList.add('loading');btn.disabled=true;
+  
+  setTimeout(()=>{
+    try{
+      BT_SIM=simulate(series,cap,comm/100,0,0,P,fillMode);
+      renderBTResult(BT_SIM);
+      renderBTTrades(BT_SIM);
+    } catch(err) {
+      alert("백테스트 오류: " + err.message);
+      console.error(err);
+    }
+    btn.classList.remove('loading');btn.disabled=false;
+  },30);
+}
+
+function renderBTResult(sim){
+  const m=sim.m;
+  const kpis=[
+    {lb:'총 수익률',v:(m.tr>=0?'+':'')+m.tr.toFixed(2)+'%',c:m.tr>=0?'cg':'cr',s:`$${m.init.toLocaleString()}→$${m.fin.toLocaleString()}`},
+    {lb:'CAGR',v:(m.cagr>=0?'+':'')+m.cagr.toFixed(2)+'%',c:m.cagr>=0?'cg':'cr',s:'연환산'},
+    {lb:'MDD',v:m.mdd.toFixed(2)+'%',c:'cr',s:(m.mPk?.slice(5)||'')+'~'+(m.mTr?.slice(5)||'')},
+    {lb:'샤프',v:m.sharpe.toFixed(3),c:m.sharpe>1?'cg':'cy',s:'연율화'},
+    {lb:'거래일',v:m.nD+'일',c:'ca',s:sim.DT[0]+' ~ '+sim.DT[sim.DT.length-1]},
+    {lb:'사이클',v:m.cy+'회',c:'ca',s:'완결'},
+    {lb:'승률',v:m.wr+'%',c:m.wr>=50?'cg':'cr',s:`${m.win}승 ${m.lose}패`},
+  ].map(k=>`<div class="kpi"><div class="kl">${k.lb}</div><div class="kv ${k.c}">${k.v}</div><div class="ks">${k.s}</div></div>`).join('');
+  const entries=Object.entries(sim.monthly).sort((a,b)=>a[0]<b[0]?-1:1);
+  const rets=entries.map(([,v])=>r2((v.eEq/v.sEq-1)*100));
+  const maxA=Math.max(...rets.map(Math.abs),1);
+  const hmH=entries.map(([ym,],i)=>{const ret=rets[i],it=Math.min(Math.abs(ret)/maxA,1);
+    const bg=ret>=0?`rgba(52,211,153,${.1+it*.75})`:`rgba(248,113,113,${.1+it*.75})`;
+    const tc=it>.55?'#fff':ret>=0?'#34d399':'#f87171';
+    return`<div class="hmc" style="background:${bg};color:${tc}"><div class="hml">${ym}</div><div>${ret>=0?'+':''}${ret.toFixed(1)}%</div></div>`;
+  }).join('');
+  document.getElementById('btResult').innerHTML=`
+    <div class="kg">${kpis}</div>
+    <div class="cw2">
+      <div class="leg"><div class="li"><div class="ld" style="background:#38bdf8"></div>에쿼티</div><div class="li"><div class="ld" style="background:#f87171"></div>MDD</div>
+        <span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--t3)">파라미터: ${_currentPreset}</span></div>
+      <div style="position:relative;height:230px"><canvas id="cvBT"></canvas></div>
+    </div>
+    <div class="cw2"><div class="ct">월별 수익률</div><div class="hmg">${hmH}</div></div>`;
+  const ctx=document.getElementById('cvBT').getContext('2d');
+  if(CI.bt)CI.bt.destroy();
+  const g=ctx.createLinearGradient(0,0,0,280);g.addColorStop(0,'rgba(56,189,248,.13)');g.addColorStop(1,'rgba(56,189,248,.01)');
+  CI.bt=new Chart(ctx,{type:'line',data:{labels:sim.DT,datasets:[
+    {label:'에쿼티($)',data:sim.EQ,yAxisID:'y',borderColor:'#38bdf8',borderWidth:2,fill:true,backgroundColor:g,tension:.35,pointRadius:0,order:1},
+    {label:'MDD(%)',data:sim.DD,yAxisID:'y2',borderColor:'#f8717188',borderWidth:1.5,fill:false,tension:.25,pointRadius:0,order:2},
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{display:true,labels:{boxWidth:9,padding:12,color:'#94a3b8'}},tooltip:{backgroundColor:'#131820',borderColor:'#22304a',borderWidth:1,callbacks:{title:i=>i[0].label,label:i=>i.datasetIndex===0?` $${i.raw.toLocaleString()}`:` MDD: ${i.raw.toFixed(2)}%`}}},
+    scales:{x:{grid:{color:'#1a2133'},ticks:{maxTicksLimit:12}},y:{position:'left',grid:{color:'#1a2133'},ticks:{callback:v=>'$'+v.toLocaleString()}},y2:{position:'right',grid:{drawOnChartArea:false},ticks:{callback:v=>v.toFixed(0)+'%'},reverse:true}}}});
+}
+function renderBTTrades(sim){
+  const tr=[...sim.trades].reverse().slice(0,500);
+  if(!tr.length){document.getElementById('btTrContent').innerHTML='<div class="ph"><div class="ico">📋</div><div>거래 없음</div></div>';return;}
+  const rows=tr.map(t=>{const b=t.type==='BUY';
+    const ph=t.pnl!=null?(t.pnl>=0?`<span class="pos">+$${t.pnl.toFixed(2)}</span>`:`<span class="neg">-$${Math.abs(t.pnl).toFixed(2)}</span>`):'—';
+    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}</td><td style="color:${b?'var(--gr)':'var(--rd)'}">$${t.price.toFixed(2)}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td></tr>`;
+  }).join('');
+  document.getElementById('btTrContent').innerHTML=`
+    <div class="tw"><div class="th2"><span>${sim.trades.length}건 (최신 500 표시)</span></div>
+      <div style="max-height:460px;overflow-y:auto">
+        <table><thead><tr><th>날짜</th><th>구분</th><th>레이블</th><th>체결가</th><th>수량</th><th>금액</th><th>PnL</th></tr></thead>
+        <tbody>${rows}</tbody></table></div></div>`;
+}
+
+/* ══════ 가격 차트 ══════ */
+function renderPriceChart(){
+  const ctx=document.getElementById('cvPrice').getContext('2d');
+  const recent=PRICES.slice(-180);
+  const g=ctx.createLinearGradient(0,0,0,280);g.addColorStop(0,'rgba(56,189,248,.14)');g.addColorStop(1,'rgba(56,189,248,.01)');
+  if(CI.price)CI.price.destroy();
+  CI.price=new Chart(ctx,{type:'line',data:{labels:recent.map(p=>p.date),datasets:[{data:recent.map(p=>p.close),borderColor:'#38bdf8',borderWidth:2,fill:true,backgroundColor:g,tension:.35,pointRadius:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#131820',borderColor:'#22304a',borderWidth:1,callbacks:{title:i=>i[0].label,label:i=>` $${i.raw.toFixed(2)}`}}},
+      scales:{x:{grid:{color:'#1a2133'},ticks:{maxTicksLimit:10}},y:{grid:{color:'#1a2133'},ticks:{callback:v=>'$'+v.toLocaleString()}}}}});
+}
+
+/* ══════ 유틸 ══════ */
+function mt(n,el){document.querySelectorAll('.mpane').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.mtab').forEach(t=>t.classList.remove('active'));document.getElementById('pane-'+n).classList.add('active');el.classList.add('active');}
+function sst(n,el){document.querySelectorAll('.stp').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));document.getElementById('stp-'+n).classList.add('active');el.classList.add('active');}
+function sp(t,el){
+  document.querySelectorAll('.pb').forEach(b=>b.classList.remove('on'));el.classList.add('on');
+  if(!PRICES.length)return;
+  const nAgo=n=>PRICES[Math.max(PRICES.length-n,0)].date,L=LAST,F=FIRST;let s,e;
+  if(t==='1M'){s=nAgo(22);e=L;}else if(t==='3M'){s=nAgo(66);e=L;}else if(t==='6M'){s=nAgo(132);e=L;}
+  else if(t==='1Y'){s=nAgo(252);e=L;}else if(t==='ALL'){s=F;e=L;}
+  else if(t==='2022'){s='2022-01-03';e='2022-12-30';}else if(t==='2023'){s='2023-01-03';e='2023-12-29';}
+  document.getElementById('sd').value=s;document.getElementById('ed').value=e;updDI();
+}
+function updDI(){
+  const s=document.getElementById('sd').value,e=document.getElementById('ed').value;
+  const cnt=PRICES.filter(p=>p.date>=s&&p.date<=e).length;
+  document.getElementById('di').textContent=`→ ${cnt} 거래일`;
+}
+['sd','ed'].forEach(id=>document.getElementById(id)?.addEventListener('change',updDI));
+
+init();
+</script>
+</body>
+</html>
