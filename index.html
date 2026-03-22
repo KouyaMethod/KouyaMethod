@@ -38,14 +38,14 @@ h1 span{color:var(--ac)}
 .mtab:hover:not(.active){color:var(--t2)}
 .mpane{display:none;padding:22px 0}.mpane.active{display:block}
 
-/* field - 정렬 수정 */
+/* field */
 .field{display:flex;flex-direction:column;gap:5px}
 .field label{font-size:10px;font-family:var(--mono);color:var(--t3);letter-spacing:.07em;line-height:1.4}
 .field input,.field select{
   background:#0e1117;border:1px solid var(--b2);color:var(--t1);
   font-family:var(--mono);font-size:13px;padding:8px 10px;
   border-radius:4px;outline:none;transition:border-color .2s;width:100%;
-  height:36px;  /* 고정 높이로 정렬 통일 */
+  height:36px;
 }
 .field input:focus,.field select:focus{border-color:var(--ac)}
 .field input[type=number]{-moz-appearance:textfield}
@@ -53,7 +53,7 @@ h1 span{color:var(--ac)}
 .field .hint{font-size:10px;color:var(--t3);font-family:var(--mono);line-height:1.4}
 .field select{cursor:pointer;appearance:auto}
 
-/* grid - align-items:start 로 변경해 라벨 높이 달라도 위에서 정렬 */
+/* grid */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:14px 12px;align-items:start}
 .grid-end{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:14px 12px;align-items:end}
 .drow{display:flex;align-items:center;gap:7px}
@@ -196,7 +196,6 @@ tr:hover td{background:rgba(255,255,255,.02)}
   <div class="mtab" onclick="mt('settings',this)">⚙ 설정</div>
 </nav>
 
-<!-- 시그널 -->
 <div class="mpane active" id="pane-signal">
   <div class="today-card" id="todayCard">
     <div class="lo"><div class="ls"></div><span>데이터 로드 중...</span></div>
@@ -207,7 +206,6 @@ tr:hover td{background:rgba(255,255,255,.02)}
   </div>
 </div>
 
-<!-- 백테스트 -->
 <div class="mpane" id="pane-backtest">
   <div class="sec blue">
     <div class="sec-title blue">백테스트 설정
@@ -238,7 +236,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
       <div class="field">
         <label>수수료 (%, 편도)</label>
-        <input type="number" id="btComm" value="0.05" min="0" max="1" step="0.01">
+        <input type="number" id="btComm" value="0" min="0" max="1" step="0.01">
       </div>
       <div class="field">
         <label>체결 방식</label>
@@ -267,12 +265,10 @@ tr:hover td{background:rgba(255,255,255,.02)}
   </div>
 </div>
 
-<!-- 거래 내역 -->
 <div class="mpane" id="pane-trades">
   <div id="trContent"><div class="ph"><div class="ico">📋</div><div>설정 저장 후 내역이 표시됩니다</div></div></div>
 </div>
 
-<!-- 설정 -->
 <div class="mpane" id="pane-settings">
   <div class="sec blue">
     <div class="sec-title blue">💰 투자 설정
@@ -285,7 +281,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
       <div class="field">
         <label>거래 수수료 (%, 편도)</label>
-        <input type="number" id="cfgComm" value="0.05" min="0" max="1" step="0.01">
+        <input type="number" id="cfgComm" value="0" min="0" max="1" step="0.01">
         <span class="hint">0.05 = 0.05%</span>
       </div>
       <div class="field">
@@ -397,7 +393,7 @@ let _currentPreset='baseline', _trFilter='all';
 
 /* ══════ 설정 저장/로드 ══════ */
 function defSettings(){
-  return{capital:10000,comm:0.05,start:'',holdings:0,avg:0,preset:'baseline',params:{...PRESETS.baseline}};
+  return{capital:10000,comm:0,start:'',holdings:0,avg:0,preset:'baseline',params:{...PRESETS.baseline}};
 }
 function loadCfg(){
   try{return JSON.parse(localStorage.getItem(SKEY)||'null')||defSettings();}catch{return defSettings();}
@@ -418,12 +414,12 @@ function getCurCfg(){
 }
 function applyCfgToUI(s){
   document.getElementById('cfgCapital').value  = s.capital  ||10000;
-  document.getElementById('cfgComm').value     = s.comm     ||0.05;
+  document.getElementById('cfgComm').value     = s.comm !== undefined ? s.comm : 0;
   document.getElementById('cfgStart').value    = s.start    ||FIRST;
   document.getElementById('cfgHoldings').value = s.holdings ||0;
   document.getElementById('cfgAvg').value      = s.avg      ||0;
   document.getElementById('cfgFillMode').value = s.fillMode ||'close';
-  document.getElementById('btComm').value      = s.comm     ||0.05;
+  document.getElementById('btComm').value      = s.comm !== undefined ? s.comm : 0;
   document.getElementById('btCap').value       = s.capital  ||10000;
   _currentPreset = s.preset||'baseline';
   applyParamsToUI(s.params||PRESETS.baseline);
@@ -526,7 +522,7 @@ function saveCfg(){
   saveCfgData(s);
   showToast('✓ 설정 저장됨');
   runSim(s);
-  document.getElementById('btComm').value=s.comm;
+  document.getElementById('btComm').value=s.comm !== undefined ? s.comm : 0;
   document.getElementById('btCap').value=s.capital;
 }
 function resetCfg(){
@@ -667,336 +663,10 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
       }
     }
 
-    // 다음 날 사용될 주문 세팅 및 당일 기록
     const res=recP(cs,close,avg,h,p2p,p2q,p3p,p3q,P);
     pendingOrders=res;
     daily.push({date,price:close,holdings:h,avg_price:r2(avg),cash:r2(cash),equity:r2(cash+h*close),profit_pct:r2(avg>0&&h>0?(close/avg-1)*100:0),cycle});
   }
   
   const last=daily[daily.length-1];
-  const lastOrd=last?recP(cs,last.price,last.avg_price,last.holdings,p2p,p2q,p3p,p3q,P):{buys:[],sells:[]};
-  const EQ=daily.map(d=>d.equity),N=EQ.length,DT=daily.map(d=>d.date);
-  const maxEQ=Math.max(...EQ),minEQ=Math.min(...EQ);
-  const mdd=-r2((maxEQ-minEQ)/maxEQ*100),mPk=DT[EQ.indexOf(maxEQ)],mTr=DT[EQ.indexOf(minEQ)];
-  let _pk=EQ[0];const DD=EQ.map((eq,i)=>{if(eq>_pk)_pk=eq;return r2((eq/_pk-1)*100);});
-  const DR=EQ.slice(1).map((eq,i)=>r2((eq/EQ[i]-1)*100));
-  const monthly={};daily.forEach(d=>{const ym=d.date.slice(0,7);if(!monthly[ym])monthly[ym]={sEq:d.equity,eEq:d.equity,sCl:d.price,eCl:d.price};monthly[ym].eEq=d.equity;monthly[ym].eCl=d.price;});
-  const init=capital,fin=EQ[N-1];
-  const sells=trades.filter(t=>t.type==='SELL'),pnls=sells.map(t=>t.pnl||0);
-  const win=pnls.filter(p=>p>0).length,lose=pnls.filter(p=>p<=0).length;
-  const avgR=DR.reduce((a,b)=>a+b,0)/Math.max(DR.length,1)/100;
-  const stdR=Math.sqrt(DR.reduce((s,v)=>s+(v/100-avgR)**2,0)/Math.max(DR.length-1,1));
-  const sharpe=stdR>0?r2(avgR/stdR*Math.sqrt(252)):0;
-  
-  return{m:{tr:r2((fin/init-1)*100),cagr:r2(((fin/init)**(252/Math.max(N,1))-1)*100),mdd,mPk,mTr,sharpe,fin:r2(fin),init,nD:N,cy:cycle,nB:trades.filter(t=>t.type==='BUY').length,nS:sells.length,win,lose,wr:r2(win/Math.max(pnls.length,1)*100)},EQ,DT,DD,DR,trades,daily,monthly,last,lastOrd,cs_final:cs};
-}
-/* ══════ 초기화 ══════ */
-Chart.defaults.color='#64748b';Chart.defaults.borderColor='#1a2133';
-Chart.defaults.font.family="'IBM Plex Mono',monospace";Chart.defaults.font.size=10;
-const CI={};
-
-async function init(){
-  // ── prices.json 로드 (스마트 캐시: today.json 날짜 비교) ──────
-  // today.json을 먼저 fetch해서 마지막 업데이트 날짜 확인
-  let todayData = null;
-  try{
-    // today.json은 작은 파일이므로 항상 최신으로 fetch
-    const res=await fetch('data/today.json?t='+Date.now());
-    if(res.ok) todayData=await res.json();
-  }catch{}
-
-  // 헤더 업데이트
-  if(todayData){
-    const L=todayData.date||'';
-    document.getElementById('liveDot').className='dot'+(isRecent(L)?'':' stale');
-    document.getElementById('updatedAt').textContent=todayData.generated_at||L;
-  }
-
-  // prices.json: 캐시 키를 today.json의 date로 관리
-  // → 날짜가 바뀐 날만 새로 fetch, 같은 날은 브라우저 캐시 사용
-  const pricesCacheKey = todayData?.date || 'nodate';
-  const CACHE_STORE = 'soxl-prices-v1';
-
-  try{
-    let raw = null;
-
-    // Cache API 지원 여부 확인
-    if('caches' in window){
-      try{
-        const cache = await caches.open(CACHE_STORE);
-        const cachedRes = await cache.match('prices-' + pricesCacheKey);
-        if(cachedRes){
-          raw = await cachedRes.json();
-          console.log('prices.json 캐시 히트 ('+pricesCacheKey+')');
-        } else {
-          // 캐시 미스: 새로 fetch
-          document.getElementById('todayCard').innerHTML=
-            '<div class="lo"><div class="sp" style="display:inline-block"></div> <span style="color:var(--t2)">데이터 로딩 중...</span></div>';
-          const res=await fetch('data/prices.json');
-          if(!res.ok)throw new Error('prices.json 로드 실패 ('+res.status+')');
-          raw = await res.json();
-          // 새 캐시 저장 (이전 캐시 삭제)
-          const keys = await cache.keys();
-          for(const k of keys) await cache.delete(k);
-          await cache.put('prices-'+pricesCacheKey, new Response(JSON.stringify(raw)));
-          console.log('prices.json 새로 fetch 및 캐시 저장');
-        }
-      } catch(cacheErr){
-        // Cache API 실패 시 일반 fetch로 fallback
-        console.warn('Cache API 오류, 일반 fetch:', cacheErr);
-        const res=await fetch('data/prices.json');
-        if(!res.ok)throw new Error('prices.json 로드 실패 ('+res.status+')');
-        raw = await res.json();
-      }
-    } else {
-      // Cache API 미지원: 일반 fetch
-      const res=await fetch('data/prices.json');
-      if(!res.ok)throw new Error('prices.json 로드 실패 ('+res.status+')');
-      raw = await res.json();
-    }
-
-    // [date,o,h,l,c] 배열 또는 {date,open,...} 객체 모두 지원
-    PRICES=raw.map(p=>Array.isArray(p)
-      ?{date:p[0],open:p[1],high:p[2],low:p[3],close:p[4]}
-      :{date:p.date,open:p.open||p.close,high:p.high||p.close,low:p.low||p.close,close:p.close});
-    FIRST=PRICES[0].date;LAST=PRICES[PRICES.length-1].date;
-  }catch(e){
-    document.getElementById('todayCard').innerHTML=
-      '<div class="lo" style="color:var(--rd)">⚠ '+e.message+'<br><small style=\'margin-top:6px\'>GitHub Pages 배포 후 data/prices.json이 있어야 합니다</small></div>';
-    return;
-  }
-
-  // updatedAt fallback (today.json 없을 때)
-  if(!todayData){
-    document.getElementById('updatedAt').textContent=LAST;
-    document.getElementById('liveDot').className='dot'+(isRecent(LAST)?'':' stale');
-  }
-
-  // 날짜 범위
-  // 백테스트 날짜 범위는 PRICES 데이터 범위로 제한
-  ['sd','ed'].forEach(id=>{const el=document.getElementById(id);if(el){el.min=FIRST;el.max=LAST;}});
-  // 투자 시작일은 미래도 허용 (오늘 포함) - 없는 날짜면 runSim에서 fallback 처리
-  const cfgEl=document.getElementById('cfgStart');
-  if(cfgEl){cfgEl.min=FIRST;cfgEl.max='';}
-  document.getElementById('sd').value=FIRST;
-  document.getElementById('ed').value=LAST;
-
-  // 파라미터 UI
-  initParamUI();
-
-  // 저장된 설정 로드
-  const s=loadCfg();
-  if(!s.start)s.start=FIRST;
-  applyCfgToUI(s);
-  updDI();
-
-  // 차트
-  renderPriceChart();
-
-  // 시뮬
-  runSim(s);
-}
-
-function isRecent(d){const diff=(new Date()-new Date(d))/86400000;return diff<=(new Date().getDay()===1?4:2);}
-
-/* ══════ 시뮬 ══════ */
-function runSim(s){
-  let startDate=s.start||FIRST;
-
-  // 시작일이 LAST보다 미래 → 아직 데이터 없음 = 처음 진입 케이스
-  // 백테스트 없이 마지막 데이터로 오늘 신호만 제시
-  if(startDate>LAST){
-    const last=PRICES[PRICES.length-1];
-    const prev=PRICES.length>=2?PRICES[PRICES.length-2]:last;
-    const close=last.close;
-    const P=s.params||PRESETS.baseline;
-    const cs=s.capital||10000;
-    // 보유 없음(처음 진입) 기준으로 주문 생성
-    const ord=recP(cs,close,0,s.holdings||0,0,0,0,0,P);
-    // SIM을 최소한의 구조로 만들어 renderSignal에 전달
-    SIM={
-      last:{date:last.date,price:close,holdings:s.holdings||0,avg_price:s.avg||0,
-            cash:cs,equity:cs+(s.holdings||0)*close,profit_pct:0,cycle:0},
-      lastOrd:ord,
-      cs_final:cs,
-      EQ:[cs],DT:[last.date],trades:[],daily:[],
-      m:{tr:0,cagr:0,mdd:0,sharpe:0,fin:cs,init:cs,nD:0,cy:0,nB:0,nS:0,win:0,lose:0,wr:0}
-    };
-    renderSignal(SIM,[prev,last]);
-    renderTrades(SIM);
-    return;
-  }
-
-  // 시작일이 PRICES에 없으면 가장 가까운 이전 날짜로 fallback
-  if(!PRICES.find(p=>p.date===startDate)){
-    const before=PRICES.filter(p=>p.date<startDate);
-    startDate=before.length?before[before.length-1].date:FIRST;
-  }
-  const series=PRICES.filter(p=>p.date>=startDate);
-  if(!series.length){renderSignal(null);return;}
-  SIM=simulate(series,s.capital||10000,(s.comm||0)/100,s.holdings||0,s.avg||0,s.params||PRESETS.baseline,s.fillMode||'close');
-  renderSignal(SIM,series);
-  renderTrades(SIM);
-}
-
-/* ══════ 시그널 ══════ */
-function renderSignal(sim,series){
-  if(!sim){document.getElementById('todayCard').innerHTML='<div class="lo"><span>데이터 없음</span></div>';return;}
-  const last=sim.last,orders=sim.lastOrd;
-  const close=last.price,prev=series&&series.length>=2?series[series.length-2].close:close;
-  const chg=(close/prev-1)*100,chgCls=chg>0?'up':chg<0?'dn':'flat';
-  const profCls=last.profit_pct>0?'cg':last.profit_pct<0?'cr':'cy';
-  let buyH='',sellH='';
-  (orders.buys||[]).forEach(([p,q,l])=>{buyH+=`<div class="oi"><span class="ol">${l}</span><div style="display:flex;align-items:center;gap:7px"><span class="op2 buy">$${p.toFixed(2)}</span><span class="oq">${q}주</span></div></div>`;});
-  (orders.sells||[]).forEach(([p,q,l])=>{sellH+=`<div class="oi"><span class="ol">${l}</span><div style="display:flex;align-items:center;gap:7px"><span class="op2 sell">$${p.toFixed(2)}</span><span class="oq">${q}주</span></div></div>`;});
-  if(!sellH)sellH='<div class="no-order">보유 없음 — 매도 없음</div>';
-  document.getElementById('todayCard').innerHTML=`
-    <div class="tc-title">📅 오늘의 매매 신호 — ${last.date}</div>
-    <div class="price-row"><div class="pm">$${close.toFixed(2)}</div><div class="pch ${chgCls}">${chg>=0?'+':''}${chg.toFixed(2)}%</div></div>
-    <div class="stat-grid">
-      <div class="stat"><div class="sl">사이클 원금</div><div class="sv cw">$${(sim.cs_final||0).toLocaleString()}</div></div>
-      <div class="stat"><div class="sl">평단가</div><div class="sv">${last.avg_price>0?'$'+last.avg_price:'—'}</div></div>
-      <div class="stat"><div class="sl">보유</div><div class="sv ca">${last.holdings}주</div></div>
-      <div class="stat"><div class="sl">손익</div><div class="sv ${profCls}">${last.profit_pct?(last.profit_pct>=0?'+':'')+last.profit_pct.toFixed(2)+'%':'—'}</div></div>
-      <div class="stat"><div class="sl">현금</div><div class="sv">$${last.cash.toLocaleString()}</div></div>
-      <div class="stat"><div class="sl">총 자산</div><div class="sv cw">$${last.equity.toLocaleString()}</div></div>
-    </div>
-    <div class="orders-grid">
-      <div class="op"><div class="oh buy">📈 매수 주문</div>${buyH}</div>
-      <div class="op"><div class="oh sell">📉 매도 주문</div>${sellH}</div>
-    </div>`;
-}
-
-/* ══════ 거래내역 ══════ */
-function renderTrades(sim){
-  let tr=[...sim.trades].reverse();
-  if(_trFilter==='BUY')tr=tr.filter(t=>t.type==='BUY');
-  else if(_trFilter==='SELL')tr=tr.filter(t=>t.type==='SELL');
-  else if(_trFilter==='win')tr=tr.filter(t=>t.type==='SELL'&&(t.pnl||0)>0);
-  else if(_trFilter==='lose')tr=tr.filter(t=>t.type==='SELL'&&(t.pnl||0)<=0);
-  if(!tr.length){document.getElementById('trContent').innerHTML='<div class="ph"><div class="ico">📋</div><div>거래 없음</div></div>';return;}
-  const rows=tr.map(t=>{const b=t.type==='BUY';
-    const ph=t.pnl!=null?(t.pnl>=0?`<span class="pos">+$${t.pnl.toFixed(2)}</span>`:`<span class="neg">-$${Math.abs(t.pnl).toFixed(2)}</span>`):'—';
-    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}</td><td style="color:${b?'var(--gr)':'var(--rd)'}">$${t.price.toFixed(2)}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td><td style="color:var(--t3)">$${(b?t.avg_after:t.avg_before||0).toFixed(3)}</td></tr>`;
-  }).join('');
-  const total=sim.trades.length;
-  document.getElementById('trContent').innerHTML=`
-    <div class="fb">
-      <div class="fbn ${_trFilter==='all'?'active':''}" onclick="ftf('all',this)">전체(${total})</div>
-      <div class="fbn ${_trFilter==='BUY'?'active':''}" onclick="ftf('BUY',this)">매수</div>
-      <div class="fbn ${_trFilter==='SELL'?'active':''}" onclick="ftf('SELL',this)">매도</div>
-      <div class="fbn ${_trFilter==='win'?'active':''}" onclick="ftf('win',this)">수익</div>
-      <div class="fbn ${_trFilter==='lose'?'active':''}" onclick="ftf('lose',this)">손실</div>
-    </div>
-    <div class="tw"><div class="th2"><span>${tr.length}건</span><span style="color:var(--t3);font-size:10px">최신순</span></div>
-      <div style="max-height:460px;overflow-y:auto">
-        <table><thead><tr><th>날짜</th><th>구분</th><th>레이블</th><th>체결가</th><th>수량</th><th>금액</th><th>PnL</th><th>평단</th></tr></thead>
-        <tbody>${rows}</tbody></table></div></div>`;
-}
-function ftf(f,el){_trFilter=f;document.querySelectorAll('.fbn').forEach(b=>b.classList.remove('active'));el.classList.add('active');if(SIM)renderTrades(SIM);}
-
-/* ══════ 백테스트 ══════ */
-function runBT(){
-  const s_=document.getElementById('sd').value,e_=document.getElementById('ed').value;
-  const cap=parseFloat(document.getElementById('btCap').value)||10000;
-  const comm=(parseFloat(document.getElementById('btComm').value)||0)/100;
-  const fillMode=document.getElementById('btFillMode').value||'close';
-  if(!s_||!e_||s_>e_){alert('날짜를 확인하세요.');return;}
-  const series=PRICES.filter(p=>p.date>=s_&&p.date<=e_);
-  if(series.length<5){alert('데이터 부족');return;}
-  const P=getCurParams();
-  const btn=document.getElementById('rb');
-  btn.classList.add('loading');btn.disabled=true;
-  setTimeout(()=>{
-    BT_SIM=simulate(series,cap,comm,0,0,P,fillMode);
-    renderBTResult(BT_SIM);
-    renderBTTrades(BT_SIM);
-    btn.classList.remove('loading');btn.disabled=false;
-  },30);
-}
-
-function renderBTResult(sim){
-  const m=sim.m;
-  const kpis=[
-    {lb:'총 수익률',v:(m.tr>=0?'+':'')+m.tr.toFixed(2)+'%',c:m.tr>=0?'cg':'cr',s:`$${m.init.toLocaleString()}→$${m.fin.toLocaleString()}`},
-    {lb:'CAGR',v:(m.cagr>=0?'+':'')+m.cagr.toFixed(2)+'%',c:m.cagr>=0?'cg':'cr',s:'연환산'},
-    {lb:'MDD',v:m.mdd.toFixed(2)+'%',c:'cr',s:(m.mPk?.slice(5)||'')+'~'+(m.mTr?.slice(5)||'')},
-    {lb:'샤프',v:m.sharpe.toFixed(3),c:m.sharpe>1?'cg':'cy',s:'연율화'},
-    {lb:'거래일',v:m.nD+'일',c:'ca',s:sim.DT[0]+' ~ '+sim.DT[sim.DT.length-1]},
-    {lb:'사이클',v:m.cy+'회',c:'ca',s:'완결'},
-    {lb:'승률',v:m.wr+'%',c:m.wr>=50?'cg':'cr',s:`${m.win}승 ${m.lose}패`},
-  ].map(k=>`<div class="kpi"><div class="kl">${k.lb}</div><div class="kv ${k.c}">${k.v}</div><div class="ks">${k.s}</div></div>`).join('');
-  const entries=Object.entries(sim.monthly).sort((a,b)=>a[0]<b[0]?-1:1);
-  const rets=entries.map(([,v])=>r2((v.eEq/v.sEq-1)*100));
-  const maxA=Math.max(...rets.map(Math.abs),1);
-  const hmH=entries.map(([ym,],i)=>{const ret=rets[i],it=Math.min(Math.abs(ret)/maxA,1);
-    const bg=ret>=0?`rgba(52,211,153,${.1+it*.75})`:`rgba(248,113,113,${.1+it*.75})`;
-    const tc=it>.55?'#fff':ret>=0?'#34d399':'#f87171';
-    return`<div class="hmc" style="background:${bg};color:${tc}"><div class="hml">${ym}</div><div>${ret>=0?'+':''}${ret.toFixed(1)}%</div></div>`;
-  }).join('');
-  document.getElementById('btResult').innerHTML=`
-    <div class="kg">${kpis}</div>
-    <div class="cw2">
-      <div class="leg"><div class="li"><div class="ld" style="background:#38bdf8"></div>에쿼티</div><div class="li"><div class="ld" style="background:#f87171"></div>MDD</div>
-        <span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--t3)">파라미터: ${_currentPreset}</span></div>
-      <div style="position:relative;height:230px"><canvas id="cvBT"></canvas></div>
-    </div>
-    <div class="cw2"><div class="ct">월별 수익률</div><div class="hmg">${hmH}</div></div>`;
-  const ctx=document.getElementById('cvBT').getContext('2d');
-  if(CI.bt)CI.bt.destroy();
-  const g=ctx.createLinearGradient(0,0,0,280);g.addColorStop(0,'rgba(56,189,248,.13)');g.addColorStop(1,'rgba(56,189,248,.01)');
-  CI.bt=new Chart(ctx,{type:'line',data:{labels:sim.DT,datasets:[
-    {label:'에쿼티($)',data:sim.EQ,yAxisID:'y',borderColor:'#38bdf8',borderWidth:2,fill:true,backgroundColor:g,tension:.35,pointRadius:0,order:1},
-    {label:'MDD(%)',data:sim.DD,yAxisID:'y2',borderColor:'#f8717188',borderWidth:1.5,fill:false,tension:.25,pointRadius:0,order:2},
-  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-    plugins:{legend:{display:true,labels:{boxWidth:9,padding:12,color:'#94a3b8'}},tooltip:{backgroundColor:'#131820',borderColor:'#22304a',borderWidth:1,callbacks:{title:i=>i[0].label,label:i=>i.datasetIndex===0?` $${i.raw.toLocaleString()}`:` MDD: ${i.raw.toFixed(2)}%`}}},
-    scales:{x:{grid:{color:'#1a2133'},ticks:{maxTicksLimit:12}},y:{position:'left',grid:{color:'#1a2133'},ticks:{callback:v=>'$'+v.toLocaleString()}},y2:{position:'right',grid:{drawOnChartArea:false},ticks:{callback:v=>v.toFixed(0)+'%'},reverse:true}}}});
-}
-function renderBTTrades(sim){
-  const tr=[...sim.trades].reverse().slice(0,500);
-  if(!tr.length){document.getElementById('btTrContent').innerHTML='<div class="ph"><div class="ico">📋</div><div>거래 없음</div></div>';return;}
-  const rows=tr.map(t=>{const b=t.type==='BUY';
-    const ph=t.pnl!=null?(t.pnl>=0?`<span class="pos">+$${t.pnl.toFixed(2)}</span>`:`<span class="neg">-$${Math.abs(t.pnl).toFixed(2)}</span>`):'—';
-    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}</td><td style="color:${b?'var(--gr)':'var(--rd)'}">$${t.price.toFixed(2)}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td></tr>`;
-  }).join('');
-  document.getElementById('btTrContent').innerHTML=`
-    <div class="tw"><div class="th2"><span>${sim.trades.length}건 (최신 500 표시)</span></div>
-      <div style="max-height:460px;overflow-y:auto">
-        <table><thead><tr><th>날짜</th><th>구분</th><th>레이블</th><th>체결가</th><th>수량</th><th>금액</th><th>PnL</th></tr></thead>
-        <tbody>${rows}</tbody></table></div></div>`;
-}
-
-/* ══════ 가격 차트 ══════ */
-function renderPriceChart(){
-  const ctx=document.getElementById('cvPrice').getContext('2d');
-  const recent=PRICES.slice(-180);
-  const g=ctx.createLinearGradient(0,0,0,280);g.addColorStop(0,'rgba(56,189,248,.14)');g.addColorStop(1,'rgba(56,189,248,.01)');
-  if(CI.price)CI.price.destroy();
-  CI.price=new Chart(ctx,{type:'line',data:{labels:recent.map(p=>p.date),datasets:[{data:recent.map(p=>p.close),borderColor:'#38bdf8',borderWidth:2,fill:true,backgroundColor:g,tension:.35,pointRadius:0}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#131820',borderColor:'#22304a',borderWidth:1,callbacks:{title:i=>i[0].label,label:i=>` $${i.raw.toFixed(2)}`}}},
-      scales:{x:{grid:{color:'#1a2133'},ticks:{maxTicksLimit:10}},y:{grid:{color:'#1a2133'},ticks:{callback:v=>'$'+v.toLocaleString()}}}}});
-}
-
-/* ══════ 유틸 ══════ */
-function mt(n,el){document.querySelectorAll('.mpane').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.mtab').forEach(t=>t.classList.remove('active'));document.getElementById('pane-'+n).classList.add('active');el.classList.add('active');}
-function sst(n,el){document.querySelectorAll('.stp').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));document.getElementById('stp-'+n).classList.add('active');el.classList.add('active');}
-function sp(t,el){
-  document.querySelectorAll('.pb').forEach(b=>b.classList.remove('on'));el.classList.add('on');
-  if(!PRICES.length)return;
-  const nAgo=n=>PRICES[Math.max(PRICES.length-n,0)].date,L=LAST,F=FIRST;let s,e;
-  if(t==='1M'){s=nAgo(22);e=L;}else if(t==='3M'){s=nAgo(66);e=L;}else if(t==='6M'){s=nAgo(132);e=L;}
-  else if(t==='1Y'){s=nAgo(252);e=L;}else if(t==='ALL'){s=F;e=L;}
-  else if(t==='2022'){s='2022-01-03';e='2022-12-30';}else if(t==='2023'){s='2023-01-03';e='2023-12-29';}
-  document.getElementById('sd').value=s;document.getElementById('ed').value=e;updDI();
-}
-function updDI(){
-  const s=document.getElementById('sd').value,e=document.getElementById('ed').value;
-  const cnt=PRICES.filter(p=>p.date>=s&&p.date<=e).length;
-  document.getElementById('di').textContent=`→ ${cnt} 거래일`;
-}
-['sd','ed'].forEach(id=>document.getElementById(id)?.addEventListener('change',updDI));
-
-init();
-</script>
-</body>
-</html>
+  const lastOrd=last?recP(cs,last.price,
