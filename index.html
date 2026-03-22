@@ -586,13 +586,11 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
   for(let i=0;i<series.length;i++){
     const{date,open,close,high,low}=series[i];
     const hi=high||close, lo=low||close;
-    // 시고저종 값 정리 (OHLC 표기용)
     const dO=open||close, dH=high||close, dL=low||close, dC=close;
 
     if(pendingOrders){
       let np2=0,nq2=0,np3=0,nq3=0;
 
-      // 1. 시가 체결 모드
       if(fillMode==='open'){
         const ep_base=dO;
         for(let j=0;j<pendingOrders.sells.length;j++){
@@ -620,7 +618,6 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
           }
         }
       }
-      // 2. 종가 체결 모드 (LOC)
       else if(fillMode==='close'){
         for(let j=0;j<pendingOrders.sells.length;j++){
           const[sp,sq,sl]=pendingOrders.sells[j];
@@ -647,7 +644,6 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
           }
         }
       }
-      // 3. 지정가 체결 모드 (Limit)
       else if(fillMode==='limit'){
         for(let j=0;j<pendingOrders.sells.length;j++){
           const[sp,sq,sl]=pendingOrders.sells[j];
@@ -725,6 +721,7 @@ async function init(){
   try{
     let todayData = null;
     try{
+      // 캐시 무시 파라미터 추가
       const res=await fetch('data/today.json?t='+Date.now());
       if(res.ok) todayData=await res.json();
     }catch{}
@@ -735,33 +732,32 @@ async function init(){
       document.getElementById('updatedAt').textContent=todayData.generated_at||L;
     }
 
-    const pricesCacheKey = todayData?.date || 'nodate';
-    const CACHE_STORE = 'soxl-prices-v1';
+    // 완전히 캐시를 박살내기 위해 버전 이름을 v2로 올렸고 강제로 새로 받게 만듭니다!
+    const CACHE_STORE = 'soxl-prices-v2';
 
     let raw = null;
     if('caches' in window){
       try{
         const cache = await caches.open(CACHE_STORE);
-        const cachedRes = await cache.match('prices-' + pricesCacheKey);
-        if(cachedRes){
-          raw = await cachedRes.json();
-        } else {
-          document.getElementById('todayCard').innerHTML=
-            '<div class="lo"><div class="sp" style="display:inline-block"></div> <span style="color:var(--t2)">데이터 로딩 중...</span></div>';
-          const res=await fetch('data/prices.json');
-          if(!res.ok)throw new Error('prices.json 로드 실패 ('+res.status+')');
-          raw = await res.json();
-          const keys = await cache.keys();
-          for(const k of keys) await cache.delete(k);
-          await cache.put('prices-'+pricesCacheKey, new Response(JSON.stringify(raw)));
-        }
+        // 캐시를 무조건 지워버리고 새로 받습니다!
+        await caches.delete(CACHE_STORE); 
+        
+        document.getElementById('todayCard').innerHTML=
+          '<div class="lo"><div class="sp" style="display:inline-block"></div> <span style="color:var(--t2)">데이터 새롭게 불러오는 중...</span></div>';
+        
+        // fetch 자체에서도 강력한 캐시 무시 (t=Date.now())
+        const res=await fetch('data/prices.json?t='+Date.now());
+        if(!res.ok)throw new Error('prices.json 로드 실패 ('+res.status+')');
+        raw = await res.json();
+        await cache.put('prices-fresh', new Response(JSON.stringify(raw)));
+        
       } catch(cacheErr){
-        const res=await fetch('data/prices.json');
+        const res=await fetch('data/prices.json?t='+Date.now());
         if(!res.ok)throw new Error('prices.json 로드 실패 ('+res.status+')');
         raw = await res.json();
       }
     } else {
-      const res=await fetch('data/prices.json');
+      const res=await fetch('data/prices.json?t='+Date.now());
       if(!res.ok)throw new Error('prices.json 로드 실패 ('+res.status+')');
       raw = await res.json();
     }
@@ -982,8 +978,6 @@ function renderBTResult(sim){
 function renderBTTrades(sim){
   let tr=[...sim.trades];
   if(_trSortDesc) tr.reverse();
-  
-  // 브라우저 렉 방지를 위해 500개만 표시 (최신순 또는 과거순)
   tr = tr.slice(0, 500);
 
   if(!tr.length){document.getElementById('btTrContent').innerHTML='<div class="ph"><div class="ico">📋</div><div>거래 없음</div></div>';return;}
