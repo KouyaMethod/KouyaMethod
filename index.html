@@ -324,8 +324,60 @@ tr:hover td{background:rgba(255,255,255,.02)}
 </div>
 <div class="save-toast" id="toast">✓ 설정 저장됨</div>
 
-<script>const _$=(()=>{ const _f=v=>Math.round(v*100)/100; const _e=(cs,p)=>p<=0?0:Math.round(cs*((7)/1e2)/p); function _a(_j,_k){ if(_j>12)return ((1e4-5)/1e4);if(_j>5)return ((9897)/1e4);if(_j>1)return ((9936)/1e4); if(_j>-1)return ((1e4-5)/1e4)-Math.min(_k*((332)/1e5),((25)/1e3)); if(_j>-3)return ((989)/1e3);if(_j>-6)return ((9807)/1e4);if(_j>-10)return ((96)/1e2); return ((97)/1e2); } function _b(_j,cl,av,_k,cy){ if(cy)return _f(cl*((1006)/1e3)); if(_j>10)return _f(cl*((10092)/1e4));if(_j>5)return _f(cl*((10088)/1e4));if(_j>1)return _f(cl*((1007)/1e3)); if(av>cl)return _k>((3)/2)?_f(av*((1002)/1e3)):_f(cl*((1005)/1e3)); const ap=_f(av*((1002)/1e3)); if(ap<=cl&&_k>((3)/2)&&_k<((21)/10)&&_j<1.0)return ap; return _f(cl*((1007)/1e3)); } function _c(_j,cl,av,s1,cy,ps3){ if(cy){ if(_j<-2)return _f(s1*((1002)/1e3)); if(ps3>0&&ps3>av*((103)/1e2))return ps3; return _f(av*((1002)/1e3)); } if(s1<cl)return _f(cl*((1007)/1e3));if(_j>3)return _f(cl*((1006)/1e3));if(_j<-1)return _f(cl*((1003)/1e3)); return _f(av*((1002)/1e3)); } function _d(cs,cl,av,h,p2p=0,p2q=0,p3p=0,p3q=0){ const _i=_e(cs,cl);const _g=[],_h=[]; if(h===0){ const b1=_f(cl*((1158)/1e3)),b2=_f(cl*((997)/1e3)); _g.push([b1,_e(cs,b1),'BUY1'],[b2,_e(cs,b2),'BUY2']); return{buys:_g,sells:_h}; } const _j=av>0?(cl/av-1)*100:0,_k=_i>0?h/_i:0; const b2=_f(cl*((997)/1e3)),_r=_e(cs,b2),b1=_f(cl*_a(_j,_k)),_s=_e(cs,b1); if(b1>=b2){_g.push([b1,_s,'BUY1'],[b2,_r,'BUY2']);} else{_g.push([b2,_r,'BUY2'],[b1,_s,'BUY1']);} const cy=(p2p>0)&&(_j<5.0)&&(h>100); const _m=(_k<((3)/2))||(_j>7.0); const _n=_b(_j,cl,av,_k,cy); const _o=_m?h:(h<=_i?h:_e(cs,_n)); _h.push([_n,_o,'SELL1']); if(!_m){ const _p=_c(_j,cl,av,_n,cy,p3p),_q=_e(cs,b2); _h.push([_p,_q,'SELL2']); if(cy){const s3p=_f(p2p+0.01),s3q=p2q||_o;if(s3p>=_n)_h.push([s3p,s3q,'SELL3']);} } _h.sort((a,b)=>a[0]-b[0]);_h.forEach((s,i)=>{s[2]='SELL'+(i+1);}); return{buys:_g,sells:_h}; } return{rec:_d,r2:_f}; })(); const rec=((...a)=>_$.rec(...a)); const r2=(v=>_$.r2(v));</script>
 <script>
+const r2=(v)=>Math.round(v*100)/100;
+
+/* ══════ 탭 이동 및 UI 유틸 (복구 완료!) ══════ */
+function mt(n,el){
+  document.querySelectorAll('.mpane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.mtab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('pane-'+n).classList.add('active');
+  el.classList.add('active');
+}
+function sst(n,el){
+  document.querySelectorAll('.stp').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('stp-'+n).classList.add('active');
+  el.classList.add('active');
+}
+
+/* ══════ Kouya 신호 계산 엔진 (복구 완료!) ══════ */
+function recP(cs,cl,av,h,p2p=0,p2q=0,p3p=0,p3q=0,P={}){
+  const cqr=P.cycle_qty_rate||.07,b2f=P.buy2_factor||.997;
+  const cq=(c,p)=>p<=0?0:Math.floor(c*cqr/p);
+  function b1f(pct,hbq){
+    if(pct>12)return P.b_gt12||.995;if(pct>5)return P.b_gt5||.9897;if(pct>1)return P.b_gt1||.9936;
+    if(pct>-1)return Math.max((P.b_gt_n1||.995)-Math.min(hbq*((P.b_hbq_penalty)||.00332),(P.b_hbq_max||.025)),(P.b_gt_n1||.995)-(P.b_hbq_max||.025));
+    if(pct>-3)return P.b_gt_n3||.989;if(pct>-6)return P.b_gt_n6||.9807;if(pct>-10)return P.b_gt_n10||.96;
+    return P.b_else||.97;
+  }
+  function s1p(pct,c2,a2,hbq,cy){
+    if(cy)return r2(c2*(P.s1_carry||1.006));if(pct>10)return r2(c2*(P.s1_gt10||1.0092));
+    if(pct>5)return r2(c2*(P.s1_gt5||1.0088));if(pct>1)return r2(c2*(P.s1_gt1||1.007));
+    if(a2>c2)return hbq>1.5?r2(a2*(P.s1_avg_hi||1.002)):r2(c2*(P.s1_avg_lo||1.005));
+    const ap=r2(a2*(P.s1_avg_hi||1.002));
+    if(ap<=c2&&hbq>1.5&&hbq<2.1&&pct<1)return ap;return r2(c2*(P.s1_default||1.007));
+  }
+  function s2p(pct,c2,a2,s1,cy,ps3){
+    if(cy){if(pct<-2)return r2(s1*(P.s2_carry_deep||1.002));if(ps3>0&&ps3>a2*1.03)return ps3;return r2(a2*(P.s2_avg||1.002));}
+    if(s1<c2)return r2(c2*(P.s2_gt3||1.006));if(pct>3)return r2(c2*(P.s2_gt3||1.006));
+    if(pct<-1)return r2(c2*(P.s2_lt_n1||1.003));return r2(a2*(P.s2_default||1.002));
+  }
+  const bq=cq(cs,cl),buys=[],sells=[];
+  if(h===0){const b1=r2(cl*(P.buy1_high_factor||1.158)),b2=r2(cl*b2f);buys.push([b1,cq(cs,b1),'BUY1'],[b2,cq(cs,b2),'BUY2']);return{buys,sells};}
+  const pct=av>0?(cl/av-1)*100:0,hbq=bq>0?h/bq:0;
+  const b2=r2(cl*b2f),b2q=cq(cs,b2),b1=r2(cl*b1f(pct,hbq)),b1q=cq(cs,b1);
+  if(b1>=b2)buys.push([b1,b1q,'BUY1'],[b2,b2q,'BUY2']);else buys.push([b2,b2q,'BUY2'],[b1,b1q,'BUY1']);
+  const ohbq=P.one_sell_hbq||1.5,opct=P.one_sell_pct||7,cpct=P.carry_pct||5,cmh=P.carry_min_hold||100;
+  const cy=(p2p>0)&&(pct<cpct)&&(h>cmh),one=(hbq<ohbq)||(pct>opct);
+  const sp1=s1p(pct,cl,av,hbq,cy),sq1=one?h:(h<=bq?h:cq(cs,sp1));
+  sells.push([sp1,sq1,'SELL1']);
+  if(!one){const sp2=s2p(pct,cl,av,sp1,cy,p3p),sq2=cq(cs,b2);sells.push([sp2,sq2,'SELL2']);
+    if(cy){const s3=r2(p2p+.01),s3q=p2q||sq1;if(s3>=sp1)sells.push([s3,s3q,'SELL3']);}}
+  sells.sort((a,b)=>a[0]-b[0]);sells.forEach((s,i)=>{s[2]='SELL'+(i+1);});
+  return{buys,sells};
+}
+
 /* ══════ 상수 및 프리셋 ══════ */
 const SKEY = 'kouya_v4';
 const PRESETS = {
@@ -407,7 +459,6 @@ function applyCfgToUI(s){
   document.getElementById('btComm').value      = s.comm !== undefined ? s.comm : 0;
   document.getElementById('btCap').value       = s.capital  || 10000;
   
-  // 3-day params
   if(s.params3d) {
     document.getElementById('p3_buy_mult').value = s.params3d.buy_mult || 1.01;
     document.getElementById('p3_splits').value = s.params3d.splits || 7;
@@ -573,7 +624,7 @@ function simulateKouya(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='cl
 
     const res=recP(cs,dC,avg,h,p2p,p2q,p3p,p3q,P);
     pendingOrders=res;
-    daily.push({date,price:dC,holdings:h,avg_price:r2(avg),cash:r2(cash),equity:r2(cash+h*dC),profit_pct:r2(avg>0&&h>0?(dC/avg-1)*100:0),cycle});
+    daily.push({date,price:dC,holdings:h,avg_price:r2(avg),cash:r2(cash),equity:r2(cash+h*dC),profit_pct:r2(avg>0&&h>0?(dC/avg-1)*100:0),cycle,lastOrd:res});
   }
   
   const last=daily[daily.length-1];
@@ -597,17 +648,14 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
     const {date, open, high, low, close} = series[i];
     const dO = open||close, dH = high||close, dL = low||close, dC = close;
 
-    // 체결 처리
     if (pending_stop && h > 0) {
-      // 8일 경과: 다음날 무조건 오픈(시가)에 전량 시장가 매도
       let ep = dO; 
       let qty = h;
       let unit_rev = ep * (1-comm);
       let rev = r2(unit_rev * qty), pnl = r2((unit_rev - avg) * qty);
       h = 0; cash += rev; cycle++; splits_used = 0; days_held = 0;
-      trades.push({date, type:'SELL', label:'STOP_LOSS (8일 경과)', price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
+      trades.push({date, type:'SELL', label:'STOP_LOSS (8일 경과 시가매도)', price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
     } else {
-      // Sell First (매수가와 동일한 매도가에 닿으면 매도)
       if (pending_sell && h > 0 && dH >= pending_sell) {
         let ep = pending_sell;
         let qty = h;
@@ -617,7 +665,6 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
         trades.push({date, type:'SELL', label:'SELL (전량)', price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
       }
 
-      // Buy
       if (pending_buy && splits_used < (P.splits || 7) && dL <= pending_buy) {
         let ep = pending_buy;
         let unit_cost = ep * (1+comm);
@@ -637,7 +684,6 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
     last3.push(dC);
     if(last3.length > 3) last3.shift();
 
-    // 다음 날 애프터장 주문 계산
     pending_buy = null; pending_sell = null; pending_stop = false;
     let b1 = 0, s1 = 0, bLabel = '', sLabel = '';
 
@@ -647,13 +693,12 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
 
       if (days_held >= (P.stop_loss_days || 8)) {
         pending_stop = true;
-        s1 = dO; sLabel = 'STOP_LOSS (시가매도)';
+        s1 = dO; sLabel = 'STOP_LOSS (시가매도 예정)';
       } else {
         if (splits_used < (P.splits || 7)) {
           pending_buy = target_price; b1 = target_price; bLabel = `BUY (${splits_used+1}/${P.splits||7})`;
         }
         if (h > 0) {
-          // 매도주문가) 매수주문가와 동일
           pending_sell = target_price; s1 = target_price; sLabel = 'SELL (전량)';
         }
       }
@@ -723,7 +768,7 @@ async function init(){
       document.getElementById('updatedAt').textContent=todayData.generated_at||L;
     }
 
-    const CACHE_STORE = 'soxl-prices-v3';
+    const CACHE_STORE = 'soxl-prices-v4';
     let raw = null;
     if('caches' in window){
       try{
@@ -792,7 +837,6 @@ function runSim(s){
     
     const safeComm = (s.comm !== undefined && !isNaN(s.comm)) ? s.comm : 0;
     
-    // 🔥 선택된 알고리즘에 따라 엔진 라우팅
     if (s.strategy === 'day3') {
       SIM = simulate3Day(series, s.capital||10000, safeComm/100, s.holdings||0, s.avg||0, s.params3d, s.fillMode||'close');
     } else {
