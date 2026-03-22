@@ -21,7 +21,7 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);min-height:100
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
   background:radial-gradient(ellipse 70% 40% at 20% 0%,rgba(56,189,248,.05),transparent),
              radial-gradient(ellipse 50% 30% at 80% 100%,rgba(167,139,250,.04),transparent)}
-.page{position:relative;z-index:1;max-width:1000px;margin:0 auto;padding:0 20px 80px}
+.page{position:relative;z-index:1;max-width:1050px;margin:0 auto;padding:0 20px 80px}
 
 header{padding:30px 0 18px;border-bottom:1px solid var(--b1);display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:0}
 .chip{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--ac);background:rgba(56,189,248,.07);border:1px solid rgba(56,189,248,.2);padding:3px 9px;border-radius:2px;display:inline-block;margin-bottom:6px}
@@ -151,9 +151,10 @@ td{padding:7px 11px;border-bottom:1px solid var(--b1);vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:rgba(255,255,255,.02)}
 .pos{color:var(--gr)}.neg{color:var(--rd)}
-.fb{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
-.fbn{font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:3px;cursor:pointer;border:1px solid var(--b2);background:#0e1117;color:var(--t3);transition:all .13s;height:28px;display:inline-flex;align-items:center}
+.fb{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.fbn{font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:3px;cursor:pointer;border:1px solid var(--b2);background:#0e1117;color:var(--t3);transition:all .13s;height:28px;display:inline-flex;align-items:center;user-select:none}
 .fbn.active{background:rgba(56,189,248,.1);border-color:var(--ac);color:var(--ac)}
+.fbn.sort-btn{margin-left:auto;border-color:var(--ac);color:var(--ac);font-weight:600}
 .pb{font-family:var(--mono);font-size:9px;padding:3px 8px;border-radius:3px;cursor:pointer;border:1px solid var(--b2);background:transparent;color:var(--t3);transition:all .13s}
 .pb:hover{border-color:var(--ac);color:var(--ac)}
 .pb.on{background:rgba(56,189,248,.1);border-color:var(--ac);color:var(--ac)}
@@ -390,10 +391,9 @@ const PMETA = {
 };
 
 let PRICES=[], FIRST='', LAST='', SIM=null, BT_SIM=null;
-let _currentPreset='baseline', _trFilter='all';
+let _currentPreset='baseline', _trFilter='all', _trSortDesc=true;
 
 /* ══════ 설정 저장/로드 ══════ */
-// comm 기본값을 0으로 완벽 고정
 function defSettings(){
   return{capital:10000,comm:0,start:'',holdings:0,avg:0,preset:'baseline',params:{...PRESETS.baseline}};
 }
@@ -403,7 +403,6 @@ function loadCfg(){
 function saveCfgData(s){localStorage.setItem(SKEY,JSON.stringify(s));}
 
 function getCurCfg(){
-  // 빈칸이거나 올바르지 않은 값일 때 에러 방지용 안전 장치 추가
   const getNum = (id, fb) => isNaN(parseFloat(document.getElementById(id).value)) ? fb : parseFloat(document.getElementById(id).value);
   return{
     capital:  getNum('cfgCapital', 10000),
@@ -418,7 +417,6 @@ function getCurCfg(){
 }
 function applyCfgToUI(s){
   document.getElementById('cfgCapital').value  = s.capital  ||10000;
-  // 기존의 잘못된 fallback 연산을 없애고 0을 확실히 보장
   document.getElementById('cfgComm').value     = s.comm !== undefined ? s.comm : 0;
   document.getElementById('cfgStart').value    = s.start    ||FIRST;
   document.getElementById('cfgHoldings').value = s.holdings ||0;
@@ -588,13 +586,15 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
   for(let i=0;i<series.length;i++){
     const{date,open,close,high,low}=series[i];
     const hi=high||close, lo=low||close;
+    // 시고저종 값 정리 (OHLC 표기용)
+    const dO=open||close, dH=high||close, dL=low||close, dC=close;
 
     if(pendingOrders){
       let np2=0,nq2=0,np3=0,nq3=0;
 
       // 1. 시가 체결 모드
       if(fillMode==='open'){
-        const ep_base=open||close;
+        const ep_base=dO;
         for(let j=0;j<pendingOrders.sells.length;j++){
           const[sp,sq,sl]=pendingOrders.sells[j];
           if(h>0){
@@ -602,7 +602,7 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
             const raw_price=ep_base, unit_rev=raw_price*(1-comm);
             const rev=r2(unit_rev*qty), pnl=(unit_rev-avg)*qty;
             h-=qty;cash+=rev;
-            trades.push({date,type:'SELL',label:sl,price:raw_price,qty,revenue:rev,pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
+            trades.push({date,type:'SELL',label:sl,price:raw_price,qty,revenue:rev,pnl:r2(pnl),avg_before:r2(avg),holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
             if(h===0){avg=0;cycle++;cs=cash;}
           }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
         }
@@ -610,13 +610,13 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
         for(const[bp,bq2,bl]of pendingOrders.buys){
           if(cash>0){
             const raw_price=ep_base, unit_cost=raw_price*(1+comm);
-            if(unit_cost<=0) continue; // 무한대 에러 방지
+            if(unit_cost<=0) continue;
             const qty=Math.min(bq2,Math.floor(cash/unit_cost));
             if(qty<=0)continue;
             const cost=r2(unit_cost*qty); 
             avg = (h+qty)>0 ? (avg*h+cost)/(h+qty) : 0; 
             h+=qty; cash-=cost;
-            trades.push({date,type:'BUY',label:bl,price:raw_price,qty,cost,avg_after:r2(avg),holdings_after:h});
+            trades.push({date,type:'BUY',label:bl,price:raw_price,qty,cost,avg_after:r2(avg),holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
           }
         }
       }
@@ -624,26 +624,26 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
       else if(fillMode==='close'){
         for(let j=0;j<pendingOrders.sells.length;j++){
           const[sp,sq,sl]=pendingOrders.sells[j];
-          if(sp<=close&&h>0){ 
+          if(sp<=dC&&h>0){ 
             const qty=Math.min(sq,h);
-            const raw_price=close, unit_rev=raw_price*(1-comm);
+            const raw_price=dC, unit_rev=raw_price*(1-comm);
             const rev=r2(unit_rev*qty), pnl=(unit_rev-avg)*qty;
             h-=qty;cash+=rev;
-            trades.push({date,type:'SELL',label:sl,price:raw_price,qty,revenue:rev,pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
+            trades.push({date,type:'SELL',label:sl,price:raw_price,qty,revenue:rev,pnl:r2(pnl),avg_before:r2(avg),holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
             if(h===0){avg=0;cycle++;cs=cash;}
           }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
         }
         p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
         for(const[bp,bq2,bl]of pendingOrders.buys){
-          if(bp>=close&&cash>0){ 
-            const raw_price=close, unit_cost=raw_price*(1+comm);
+          if(bp>=dC&&cash>0){ 
+            const raw_price=dC, unit_cost=raw_price*(1+comm);
             if(unit_cost<=0) continue;
             const qty=Math.min(bq2,Math.floor(cash/unit_cost));
             if(qty<=0)continue;
             const cost=r2(unit_cost*qty); 
             avg = (h+qty)>0 ? (avg*h+cost)/(h+qty) : 0; 
             h+=qty; cash-=cost;
-            trades.push({date,type:'BUY',label:bl,price:raw_price,qty,cost,avg_after:r2(avg),holdings_after:h});
+            trades.push({date,type:'BUY',label:bl,price:raw_price,qty,cost,avg_after:r2(avg),holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
           }
         }
       }
@@ -651,18 +651,18 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
       else if(fillMode==='limit'){
         for(let j=0;j<pendingOrders.sells.length;j++){
           const[sp,sq,sl]=pendingOrders.sells[j];
-          if(hi>=sp&&h>0){ 
+          if(dH>=sp&&h>0){ 
             const qty=Math.min(sq,h);
             const raw_price=sp, unit_rev=raw_price*(1-comm);
             const rev=r2(unit_rev*qty), pnl=(unit_rev-avg)*qty;
             h-=qty;cash+=rev;
-            trades.push({date,type:'SELL',label:sl,price:raw_price,qty,revenue:rev,pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
+            trades.push({date,type:'SELL',label:sl,price:raw_price,qty,revenue:rev,pnl:r2(pnl),avg_before:r2(avg),holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
             if(h===0){avg=0;cycle++;cs=cash;}
           }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
         }
         p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
         for(const[bp,bq2,bl]of pendingOrders.buys){
-          if(lo<=bp&&cash>0){ 
+          if(dL<=bp&&cash>0){ 
             const raw_price=bp, unit_cost=raw_price*(1+comm);
             if(unit_cost<=0) continue;
             const qty=Math.min(bq2,Math.floor(cash/unit_cost));
@@ -670,22 +670,21 @@ function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close')
             const cost=r2(unit_cost*qty); 
             avg = (h+qty)>0 ? (avg*h+cost)/(h+qty) : 0; 
             h+=qty; cash-=cost;
-            trades.push({date,type:'BUY',label:bl,price:raw_price,qty,cost,avg_after:r2(avg),holdings_after:h});
+            trades.push({date,type:'BUY',label:bl,price:raw_price,qty,cost,avg_after:r2(avg),holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
           }
         }
       }
     }
 
-    const res=recP(cs,close,avg,h,p2p,p2q,p3p,p3q,P);
+    const res=recP(cs,dC,avg,h,p2p,p2q,p3p,p3q,P);
     pendingOrders=res;
-    daily.push({date,price:close,holdings:h,avg_price:r2(avg),cash:r2(cash),equity:r2(cash+h*close),profit_pct:r2(avg>0&&h>0?(close/avg-1)*100:0),cycle});
+    daily.push({date,price:dC,holdings:h,avg_price:r2(avg),cash:r2(cash),equity:r2(cash+h*dC),profit_pct:r2(avg>0&&h>0?(dC/avg-1)*100:0),cycle});
   }
   
   const last=daily[daily.length-1];
   const lastOrd=last?recP(cs,last.price,last.avg_price,last.holdings,p2p,p2q,p3p,p3q,P):{buys:[],sells:[]};
   const EQ=daily.map(d=>d.equity),N=EQ.length,DT=daily.map(d=>d.date);
   
-  // 연산 오류 발생(NaN)으로 인해 프로그램 전체가 멈추는 현상 완벽 차단
   const validEQ = EQ.filter(v => !isNaN(v));
   const maxEQ = validEQ.length > 0 ? Math.max(...validEQ) : 0;
   const minEQ = validEQ.length > 0 ? Math.min(...validEQ) : 0;
@@ -831,7 +830,6 @@ function runSim(s){
     const series=PRICES.filter(p=>p.date>=startDate);
     if(!series.length){renderSignal(null);return;}
     
-    // 수수료 파싱 방어 (빈칸 또는 에러시 0으로)
     const safeComm = (s.comm !== undefined && !isNaN(s.comm)) ? s.comm : 0;
     
     SIM=simulate(series,s.capital||10000, safeComm/100, s.holdings||0, s.avg||0, s.params||PRESETS.baseline, s.fillMode||'close');
@@ -872,18 +870,32 @@ function renderSignal(sim,series){
     </div>`;
 }
 
+/* 정렬 토글 함수 */
+function tglSort(){
+  _trSortDesc = !_trSortDesc;
+  if(SIM) renderTrades(SIM);
+  if(BT_SIM) renderBTTrades(BT_SIM);
+}
+
 /* ══════ 거래내역 ══════ */
 function renderTrades(sim){
-  let tr=[...sim.trades].reverse();
+  let tr=[...sim.trades];
+  if(_trSortDesc) tr.reverse();
+
   if(_trFilter==='BUY')tr=tr.filter(t=>t.type==='BUY');
   else if(_trFilter==='SELL')tr=tr.filter(t=>t.type==='SELL');
   else if(_trFilter==='win')tr=tr.filter(t=>t.type==='SELL'&&(t.pnl||0)>0);
   else if(_trFilter==='lose')tr=tr.filter(t=>t.type==='SELL'&&(t.pnl||0)<=0);
+  
   if(!tr.length){document.getElementById('trContent').innerHTML='<div class="ph"><div class="ico">📋</div><div>거래 없음</div></div>';return;}
+  
   const rows=tr.map(t=>{const b=t.type==='BUY';
     const ph=t.pnl!=null?(t.pnl>=0?`<span class="pos">+$${t.pnl.toFixed(2)}</span>`:`<span class="neg">-$${Math.abs(t.pnl).toFixed(2)}</span>`):'—';
-    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}</td><td style="color:${b?'var(--gr)':'var(--rd)'}">$${t.price.toFixed(2)}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td><td style="color:var(--t3)">$${(b?t.avg_after:t.avg_before||0).toFixed(3)}</td></tr>`;
+    const ohlc = `<div style="font-size:9.5px;line-height:1.4;color:var(--t3);white-space:nowrap">O:${t.day_o.toFixed(2)} H:${t.day_h.toFixed(2)}<br>L:${t.day_l.toFixed(2)} <strong style="color:var(--t1)">C:${t.day_c.toFixed(2)}</strong></div>`;
+    
+    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}</td><td style="color:${b?'var(--gr)':'var(--rd)'};font-weight:700">$${t.price.toFixed(2)}</td><td>${ohlc}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td><td style="color:var(--t3)">$${(b?t.avg_after:t.avg_before||0).toFixed(3)}</td></tr>`;
   }).join('');
+  
   const total=sim.trades.length;
   document.getElementById('trContent').innerHTML=`
     <div class="fb">
@@ -892,13 +904,14 @@ function renderTrades(sim){
       <div class="fbn ${_trFilter==='SELL'?'active':''}" onclick="ftf('SELL',this)">매도</div>
       <div class="fbn ${_trFilter==='win'?'active':''}" onclick="ftf('win',this)">수익</div>
       <div class="fbn ${_trFilter==='lose'?'active':''}" onclick="ftf('lose',this)">손실</div>
+      <div class="fbn sort-btn" onclick="tglSort()">${_trSortDesc ? '⬇ 최신순' : '⬆ 과거순'}</div>
     </div>
-    <div class="tw"><div class="th2"><span>${tr.length}건</span><span style="color:var(--t3);font-size:10px">최신순</span></div>
+    <div class="tw"><div class="th2"><span>${tr.length}건</span></div>
       <div style="max-height:460px;overflow-y:auto">
-        <table><thead><tr><th>날짜</th><th>구분</th><th>레이블</th><th>체결가</th><th>수량</th><th>금액</th><th>PnL</th><th>평단</th></tr></thead>
+        <table><thead><tr><th>날짜</th><th>구분</th><th>레이블</th><th>체결가</th><th>시/고/저/종 (OHLC)</th><th>수량</th><th>금액</th><th>PnL</th><th>평단</th></tr></thead>
         <tbody>${rows}</tbody></table></div></div>`;
 }
-function ftf(f,el){_trFilter=f;document.querySelectorAll('.fbn').forEach(b=>b.classList.remove('active'));el.classList.add('active');if(SIM)renderTrades(SIM);}
+function ftf(f,el){_trFilter=f;document.querySelectorAll('.fbn:not(.sort-btn)').forEach(b=>b.classList.remove('active'));el.classList.add('active');if(SIM)renderTrades(SIM);}
 
 /* ══════ 백테스트 ══════ */
 function runBT(){
@@ -965,17 +978,30 @@ function renderBTResult(sim){
     plugins:{legend:{display:true,labels:{boxWidth:9,padding:12,color:'#94a3b8'}},tooltip:{backgroundColor:'#131820',borderColor:'#22304a',borderWidth:1,callbacks:{title:i=>i[0].label,label:i=>i.datasetIndex===0?` $${i.raw.toLocaleString()}`:` MDD: ${i.raw.toFixed(2)}%`}}},
     scales:{x:{grid:{color:'#1a2133'},ticks:{maxTicksLimit:12}},y:{position:'left',grid:{color:'#1a2133'},ticks:{callback:v=>'$'+v.toLocaleString()}},y2:{position:'right',grid:{drawOnChartArea:false},ticks:{callback:v=>v.toFixed(0)+'%'},reverse:true}}}});
 }
+
 function renderBTTrades(sim){
-  const tr=[...sim.trades].reverse().slice(0,500);
+  let tr=[...sim.trades];
+  if(_trSortDesc) tr.reverse();
+  
+  // 브라우저 렉 방지를 위해 500개만 표시 (최신순 또는 과거순)
+  tr = tr.slice(0, 500);
+
   if(!tr.length){document.getElementById('btTrContent').innerHTML='<div class="ph"><div class="ico">📋</div><div>거래 없음</div></div>';return;}
+  
   const rows=tr.map(t=>{const b=t.type==='BUY';
     const ph=t.pnl!=null?(t.pnl>=0?`<span class="pos">+$${t.pnl.toFixed(2)}</span>`:`<span class="neg">-$${Math.abs(t.pnl).toFixed(2)}</span>`):'—';
-    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}</td><td style="color:${b?'var(--gr)':'var(--rd)'}">$${t.price.toFixed(2)}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td></tr>`;
+    const ohlc = `<div style="font-size:9.5px;line-height:1.4;color:var(--t3);white-space:nowrap">O:${t.day_o.toFixed(2)} H:${t.day_h.toFixed(2)}<br>L:${t.day_l.toFixed(2)} <strong style="color:var(--t1)">C:${t.day_c.toFixed(2)}</strong></div>`;
+    
+    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}</td><td style="color:${b?'var(--gr)':'var(--rd)'};font-weight:700">$${t.price.toFixed(2)}</td><td>${ohlc}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td></tr>`;
   }).join('');
+  
   document.getElementById('btTrContent').innerHTML=`
-    <div class="tw"><div class="th2"><span>${sim.trades.length}건 (최신 500 표시)</span></div>
+    <div class="fb" style="justify-content:flex-end">
+      <div class="fbn sort-btn" onclick="tglSort()">${_trSortDesc ? '⬇ 최신순' : '⬆ 과거순'}</div>
+    </div>
+    <div class="tw"><div class="th2"><span>${sim.trades.length}건 중 500건 표시</span></div>
       <div style="max-height:460px;overflow-y:auto">
-        <table><thead><tr><th>날짜</th><th>구분</th><th>레이블</th><th>체결가</th><th>수량</th><th>금액</th><th>PnL</th></tr></thead>
+        <table><thead><tr><th>날짜</th><th>구분</th><th>레이블</th><th>체결가</th><th>시/고/저/종 (OHLC)</th><th>수량</th><th>금액</th><th>PnL</th></tr></thead>
         <tbody>${rows}</tbody></table></div></div>`;
 }
 
