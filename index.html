@@ -579,95 +579,93 @@ function recP(cs,cl,av,h,p2p=0,p2q=0,p3p=0,p3q=0,P={}){
 }
 
 function simulate(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close'){
-  // fillMode: 'close'=종가(LOC), 'open'=익일시가(MOO), 'limit'=지정가 체결
   let cash=capital-initAvg*initH,h=initH,avg=initAvg,cs=capital,cycle=0;
   if(cash<0){cash=capital;h=initH;avg=initAvg;}
   let p2p=0,p2q=0,p3p=0,p3q=0;
-  // open모드: 전날 신호 → 익일 시가 체결을 위해 pending 저장
+  
+  // 핵심 수정: 모든 모드에서 '전날 생성된 신호(pendingOrders)'를 저장하여 오늘 체결
   let pendingOrders=null;
   const trades=[],daily=[];
+  
   for(let i=0;i<series.length;i++){
-    const{date,open,close}=series[i];
+    const{date,open,close,high,low}=series[i];
+    const hi=high||close, lo=low||close;
 
-    // ── 시가 모드: 전날 pending 주문을 오늘 시가로 체결 ──
-    if(fillMode==='open'&&pendingOrders){
-      const ep_base=open||close; // 시가 없으면 종가 fallback
+    // 1. 전날 장 마감 후 생성된 주문(Pending)을 오늘 체결
+    if(pendingOrders){
       let np2=0,nq2=0,np3=0,nq3=0;
-      for(let j=0;j<pendingOrders.sells.length;j++){
-        const[sp,sq,sl]=pendingOrders.sells[j];
-        if(h>0){
-          const qty=Math.min(sq,h),ep=r2(ep_base*(1-comm)),pnl=(ep-avg)*qty;
-          h-=qty;cash+=ep*qty;
-          trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
-          if(h===0){avg=0;cycle++;cs=cash;}
-        }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
-      }
-      p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
-      for(const[bp,bq2,bl]of pendingOrders.buys){
-        if(cash>0){
-          const ep=r2(ep_base*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
-          if(qty<=0)continue;
-          const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
-          trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
+
+      if(fillMode==='open'){
+        const ep_base=open||close;
+        for(let j=0;j<pendingOrders.sells.length;j++){
+          const[sp,sq,sl]=pendingOrders.sells[j];
+          if(h>0){
+            const qty=Math.min(sq,h),ep=r2(ep_base*(1-comm)),pnl=(ep-avg)*qty;
+            h-=qty;cash+=ep*qty;
+            trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
+            if(h===0){avg=0;cycle++;cs=cash;}
+          }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
+        }
+        p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
+        for(const[bp,bq2,bl]of pendingOrders.buys){
+          if(cash>0){
+            const ep=r2(ep_base*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
+            if(qty<=0)continue;
+            const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
+            trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
+          }
         }
       }
-      pendingOrders=null;
+      else if(fillMode==='close'){
+        for(let j=0;j<pendingOrders.sells.length;j++){
+          const[sp,sq,sl]=pendingOrders.sells[j];
+          if(sp<=close&&h>0){ // 지정가(목표가) 이상이면 종가로 체결
+            const qty=Math.min(sq,h),ep=r2(close*(1-comm)),pnl=(ep-avg)*qty;
+            h-=qty;cash+=ep*qty;
+            trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
+            if(h===0){avg=0;cycle++;cs=cash;}
+          }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
+        }
+        p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
+        for(const[bp,bq2,bl]of pendingOrders.buys){
+          if(bp>=close&&cash>0){ // 지정가(매수가) 이하이면 종가로 체결
+            const ep=r2(close*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
+            if(qty<=0)continue;
+            const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
+            trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
+          }
+        }
+      }
+      else if(fillMode==='limit'){
+        for(let j=0;j<pendingOrders.sells.length;j++){
+          const[sp,sq,sl]=pendingOrders.sells[j];
+          if(hi>=sp&&h>0){ // 당일 고가가 목표가에 닿으면 목표가로 체결
+            const qty=Math.min(sq,h),ep=r2(sp*(1-comm)),pnl=(ep-avg)*qty;
+            h-=qty;cash+=ep*qty;
+            trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
+            if(h===0){avg=0;cycle++;cs=cash;}
+          }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
+        }
+        p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
+        for(const[bp,bq2,bl]of pendingOrders.buys){
+          if(lo<=bp&&cash>0){ // 당일 저가가 매수가에 닿으면 지정가(매수가)로 체결
+            const ep=r2(bp*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
+            if(qty<=0)continue;
+            const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
+            trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
+          }
+        }
+      }
     }
 
-    // 당일 종가 기준으로 오늘의 주문 생성
+    // 2. 당일 마감 데이터로 '내일' 사용할 주문(pendingOrders) 생성
     const res=recP(cs,close,avg,h,p2p,p2q,p3p,p3q,P);
+    pendingOrders=res;
 
-    if(fillMode==='open'){
-      // 시가 모드: 오늘 생성된 주문을 내일 시가에 체결하도록 pending
-      pendingOrders=res;
-    } else if(fillMode==='close'){
-      // 종가 모드(LOC): 지정가 조건 충족 시 당일 종가로 체결
-      let np2=0,nq2=0,np3=0,nq3=0;
-      for(let j=0;j<res.sells.length;j++){
-        const[sp,sq,sl]=res.sells[j];
-        if(sp<=close&&h>0){
-          const qty=Math.min(sq,h),ep=r2(close*(1-comm)),pnl=(ep-avg)*qty;
-          h-=qty;cash+=ep*qty;
-          trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
-          if(h===0){avg=0;cycle++;cs=cash;}
-        }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
-      }
-      p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
-      for(const[bp,bq2,bl]of res.buys){
-        if(bp>=close&&cash>0){
-          const ep=r2(close*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
-          if(qty<=0)continue;
-          const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
-          trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
-        }
-      }
-    } else {
-      // 지정가 모드(Limit): 지정가 조건 충족 시 지정가 그대로 체결
-      let np2=0,nq2=0,np3=0,nq3=0;
-      const{high:dayHigh,low:dayLow}=series[i];
-      const hi=dayHigh||close,lo=dayLow||close;
-      for(let j=0;j<res.sells.length;j++){
-        const[sp,sq,sl]=res.sells[j];
-        if(hi>=sp&&h>0){
-          const qty=Math.min(sq,h),ep=r2(sp*(1-comm)),pnl=(ep-avg)*qty;
-          h-=qty;cash+=ep*qty;
-          trades.push({date,type:'SELL',label:sl,price:ep,qty,revenue:r2(ep*qty),pnl:r2(pnl),avg_before:r2(avg),holdings_after:h});
-          if(h===0){avg=0;cycle++;cs=cash;}
-        }else{if(j===1){np2=sp;nq2=sq;}if(j===2){np3=sp;nq3=sq;}}
-      }
-      p2p=np2;p2q=nq2;p3p=np3;p3q=nq3;
-      for(const[bp,bq2,bl]of res.buys){
-        if(lo<=bp&&cash>0){
-          const ep=r2(bp*(1+comm)),qty=Math.min(bq2,Math.floor(cash/ep));
-          if(qty<=0)continue;
-          const cost=ep*qty;avg=(avg*h+cost)/(h+qty);h+=qty;cash-=cost;
-          trades.push({date,type:'BUY',label:bl,price:ep,qty,cost:r2(cost),avg_after:r2(avg),holdings_after:h});
-        }
-      }
-    }
-
+    // 3. 당일 계좌 상태 기록
     daily.push({date,price:close,holdings:h,avg_price:r2(avg),cash:r2(cash),equity:r2(cash+h*close),profit_pct:r2(avg>0&&h>0?(close/avg-1)*100:0),cycle});
   }
+  
   const last=daily[daily.length-1];
   const lastOrd=last?recP(cs,last.price,last.avg_price,last.holdings,p2p,p2q,p3p,p3q,P):{buys:[],sells:[]};
   const EQ=daily.map(d=>d.equity),N=EQ.length,DT=daily.map(d=>d.date);
