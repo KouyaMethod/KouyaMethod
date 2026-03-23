@@ -667,20 +667,19 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
     let target_price = null;
     let pending_buy = null, pending_sell = null, pending_stop = false;
     let b1 = 0, s1 = 0, bLabel = '', sLabel = '';
+    let calc_str_today = ''; // 오늘 체결을 위한 산출식 저장
 
-    // 💡 [핵심] 장 시작 전(당일 종가 모름), 과거 N-1일치 종가를 기반으로 오늘의 목표가(LOC 타겟)를 미리 계산
     if (last_prices.length >= N - 1) {
       let S = 0;
       for(let j = last_prices.length - (N - 1); j < last_prices.length; j++) S += last_prices[j];
       
-      // 수학적 예측 공식: 타겟가 = (합계 * 멀티플) / (N - 멀티플)
       target_price = r2((S * mult) / (N - mult));
+      calc_str_today = `(합${r2(S)} × ${mult}) / (${N}-${mult}) = $${target_price}`;
 
       if (days_held >= (P.stop_loss_days || 8)) {
         pending_stop = true;
         s1 = dO; sLabel = 'STOP_LOSS (시가매도)';
       } else {
-        // 매수/매도 동시에 동일한 타겟가로 세팅!
         if (splits_used < (P.splits || 7)) {
           pending_buy = target_price; b1 = target_price; bLabel = `BUY (${splits_used+1}/${P.splits||7})`;
         }
@@ -690,37 +689,14 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
       }
     }
 
-    // 🔥 오늘 장중 체결 로직
     if (pending_stop && h > 0) {
-      let ep = dO; 
-      let qty = h;
+      let ep = dO, qty = h;
       let unit_rev = ep * (1-comm);
       let rev = r2(unit_rev * qty), pnl = r2((unit_rev - avg) * qty);
       h = 0; cash += rev; cycle++; splits_used = 0; days_held = 0;
-      trades.push({date, type:'SELL', label:sLabel, price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
+      trades.push({date, type:'SELL', label:sLabel, price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC, calc_str: '손절 조건 도달'});
     } else {
       
-      // 1. 매수 실행 (지정가에 도달하거나 종가가 낮으면)
-      if (pending_buy && splits_used < (P.splits || 7)) {
-        let executed = false, ep = pending_buy;
-        if (fillMode === 'close' && dC <= pending_buy) { executed = true; ep = dC; }
-        else if (fillMode === 'limit' && dL <= pending_buy) { executed = true; }
-        else if (fillMode === 'open') { executed = true; ep = dO; }
-
-        if (executed) {
-          let unit_cost = ep * (1+comm);
-          let order_cash = capital / (P.splits || 7);
-          let qty = Math.floor(order_cash / unit_cost);
-          if (qty > 0 && cash >= r2(unit_cost*qty)) {
-            let cost = r2(unit_cost * qty);
-            avg = (h+qty) > 0 ? (avg*h + cost) / (h+qty) : 0;
-            h += qty; cash -= cost; splits_used++;
-            trades.push({date, type:'BUY', label:bLabel, price:ep, qty, cost, avg_after:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
-          }
-        }
-      }
-
-      // 2. 매도 실행 (지정가에 도달하거나 종가가 높으면 전량 매도)
       if (pending_sell && h > 0) {
         let executed = false, ep = pending_sell;
         if (fillMode === 'close' && dC >= pending_sell) { executed = true; ep = dC; }
@@ -728,11 +704,28 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
         else if (fillMode === 'open') { executed = true; ep = dO; }
 
         if (executed) {
-          let qty = h;
-          let unit_rev = ep * (1-comm);
+          let qty = h, unit_rev = ep * (1-comm);
           let rev = r2(unit_rev * qty), pnl = r2((unit_rev - avg) * qty);
           h = 0; cash += rev; cycle++; splits_used = 0; days_held = 0;
-          trades.push({date, type:'SELL', label:sLabel, price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC});
+          trades.push({date, type:'SELL', label:sLabel, price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC, calc_str: calc_str_today});
+        }
+      }
+
+      if (pending_buy && splits_used < (P.splits || 7)) {
+        let executed = false, ep = pending_buy;
+        if (fillMode === 'close' && dC <= pending_buy) { executed = true; ep = dC; }
+        else if (fillMode === 'limit' && dL <= pending_buy) { executed = true; }
+        else if (fillMode === 'open') { executed = true; ep = dO; }
+
+        if (executed) {
+          let unit_cost = ep * (1+comm), order_cash = capital / (P.splits || 7);
+          let qty = Math.floor(order_cash / unit_cost);
+          if (qty > 0 && cash >= r2(unit_cost*qty)) {
+            let cost = r2(unit_cost * qty);
+            avg = (h+qty) > 0 ? (avg*h + cost) / (h+qty) : 0;
+            h += qty; cash -= cost; splits_used++;
+            trades.push({date, type:'BUY', label:bLabel, price:ep, qty, cost, avg_after:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC, calc_str: calc_str_today});
+          }
         }
       }
     }
@@ -742,7 +735,6 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
     last_prices.push(dC);
     if(last_prices.length > N - 1) last_prices.shift();
 
-    // 💡 UI 표시용 내일 주문 계산 및 수학적 수식 문자열 생성
     let next_b1 = 0, next_s1 = 0, next_bLabel = '', next_sLabel = '';
     let calc_str = null;
 
@@ -776,39 +768,6 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
   return computeMetrics(daily, trades, capital, cycle, lastOrd, capital);
 }
 
-function computeMetrics(daily, trades, capital, cycle, lastOrd, cs_final) {
-  const EQ=daily.map(d=>d.equity), N=EQ.length, DT=daily.map(d=>d.date);
-  const validEQ = EQ.filter(v => !isNaN(v));
-  const maxEQ = validEQ.length > 0 ? Math.max(...validEQ) : 0;
-  const minEQ = validEQ.length > 0 ? Math.min(...validEQ) : 0;
-  
-  const mdd= maxEQ > 0 ? -r2((maxEQ-minEQ)/maxEQ*100) : 0;
-  const maxIdx = EQ.indexOf(maxEQ), minIdx = EQ.indexOf(minEQ);
-  const mPk = maxIdx >= 0 ? DT[maxIdx] : '', mTr = minIdx >= 0 ? DT[minIdx] : '';
-  
-  let _pk=EQ[0]||0;
-  const DD=EQ.map((eq)=>{if(eq>_pk)_pk=eq;return _pk>0 ? r2((eq/_pk-1)*100) : 0;});
-  const DR=EQ.slice(1).map((eq,i)=>(EQ[i]>0 ? r2((eq/EQ[i]-1)*100) : 0));
-  
-  const monthly={};
-  daily.forEach(d=>{
-    const ym=d.date.slice(0,7);
-    if(!monthly[ym])monthly[ym]={sEq:d.equity,eEq:d.equity,sCl:d.price,eCl:d.price};
-    monthly[ym].eEq=d.equity; monthly[ym].eCl=d.price;
-  });
-  
-  const init=capital, fin=EQ[N-1]||init;
-  const sells=trades.filter(t=>t.type==='SELL'), pnls=sells.map(t=>t.pnl||0);
-  const win=pnls.filter(p=>p>0).length, lose=pnls.filter(p=>p<=0).length;
-  const avgR=DR.reduce((a,b)=>a+b,0)/Math.max(DR.length,1)/100;
-  const stdR=Math.sqrt(DR.reduce((s,v)=>s+(v/100-avgR)**2,0)/Math.max(DR.length-1,1));
-  const sharpe=stdR>0?r2(avgR/stdR*Math.sqrt(252)):0;
-  
-  return {
-    m:{tr:r2((fin/init-1)*100),cagr:init>0&&fin>0?r2(((fin/init)**(252/Math.max(N,1))-1)*100):0,mdd,mPk,mTr,sharpe,fin:r2(fin),init,nD:N,cy:cycle,nB:trades.filter(t=>t.type==='BUY').length,nS:sells.length,win,lose,wr:r2(win/Math.max(pnls.length,1)*100)},
-    EQ,DT,DD,DR,trades,daily,monthly,last:daily[daily.length-1],lastOrd,cs_final
-  };
-}
 
 /* ══════ 초기화 및 실행 ══════ */
 Chart.defaults.color='#64748b';Chart.defaults.borderColor='#1a2133';
@@ -965,7 +924,9 @@ function renderTrades(sim){
   const rows=tr.map(t=>{const b=t.type==='BUY';
     const ph=t.pnl!=null?(t.pnl>=0?`<span class="pos">+$${t.pnl.toFixed(2)}</span>`:`<span class="neg">-$${Math.abs(t.pnl).toFixed(2)}</span>`):'—';
     const ohlc = `<div style="font-size:9.5px;line-height:1.4;color:var(--t3);white-space:nowrap">O:${t.day_o.toFixed(2)} H:${t.day_h.toFixed(2)}<br>L:${t.day_l.toFixed(2)} <strong style="color:var(--t1)">C:${t.day_c.toFixed(2)}</strong></div>`;
-    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}</td><td style="color:${b?'var(--gr)':'var(--rd)'};font-weight:700">$${t.price.toFixed(2)}</td><td>${ohlc}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td><td style="color:var(--t3)">$${(b?t.avg_after:t.avg_before||0).toFixed(3)}</td></tr>`;
+    // 산출식을 렌더링하는 부분 추가
+    const calcInfo = t.calc_str ? `<div style="font-size:9px;color:var(--pu);margin-top:4px;letter-spacing:-0.2px">${t.calc_str}</div>` : '';
+    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}${calcInfo}</td><td style="color:${b?'var(--gr)':'var(--rd)'};font-weight:700">$${t.price.toFixed(2)}</td><td>${ohlc}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td><td style="color:var(--t3)">$${(b?t.avg_after:t.avg_before||0).toFixed(3)}</td></tr>`;
   }).join('');
   
   document.getElementById('trContent').innerHTML=`
@@ -982,6 +943,7 @@ function renderTrades(sim){
         <table><thead><tr><th>날짜</th><th>구분</th><th>레이블</th><th>체결가</th><th>시/고/저/종 (OHLC)</th><th>수량</th><th>금액</th><th>PnL</th><th>평단</th></tr></thead>
         <tbody>${rows}</tbody></table></div></div>`;
 }
+
 function ftf(f,el){_trFilter=f;document.querySelectorAll('.fbn:not(.sort-btn)').forEach(b=>b.classList.remove('active'));el.classList.add('active');if(SIM)renderTrades(SIM);}
 
 function runBT(){
@@ -1074,7 +1036,9 @@ function renderBTTrades(sim){
   const rows=tr.map(t=>{const b=t.type==='BUY';
     const ph=t.pnl!=null?(t.pnl>=0?`<span class="pos">+$${t.pnl.toFixed(2)}</span>`:`<span class="neg">-$${Math.abs(t.pnl).toFixed(2)}</span>`):'—';
     const ohlc = `<div style="font-size:9.5px;line-height:1.4;color:var(--t3);white-space:nowrap">O:${t.day_o.toFixed(2)} H:${t.day_h.toFixed(2)}<br>L:${t.day_l.toFixed(2)} <strong style="color:var(--t1)">C:${t.day_c.toFixed(2)}</strong></div>`;
-    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}</td><td style="color:${b?'var(--gr)':'var(--rd)'};font-weight:700">$${t.price.toFixed(2)}</td><td>${ohlc}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td></tr>`;
+    // 산출식을 렌더링하는 부분 추가
+    const calcInfo = t.calc_str ? `<div style="font-size:9px;color:var(--pu);margin-top:4px;letter-spacing:-0.2px">${t.calc_str}</div>` : '';
+    return`<tr><td style="color:#fff">${t.date}</td><td><span style="color:${b?'var(--gr)':'var(--rd)'};font-weight:600">${t.type}</span></td><td style="color:var(--t3)">${t.label}${calcInfo}</td><td style="color:${b?'var(--gr)':'var(--rd)'};font-weight:700">$${t.price.toFixed(2)}</td><td>${ohlc}</td><td>${t.qty}주</td><td>$${(b?t.cost:t.revenue)?.toFixed(0)||'—'}</td><td>${ph}</td></tr>`;
   }).join('');
   
   document.getElementById('btTrContent').innerHTML=`
