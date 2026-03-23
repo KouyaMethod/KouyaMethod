@@ -646,7 +646,7 @@ function simulateKouya(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='cl
   return computeMetrics(daily, trades, capital, cycle, lastOrd, cs);
 }
 
-/* ══════ N일 종가 매매법 엔진 (LOC 예측형) ══════ */
+/* ══════ N일 종가 매매법 엔진 (LOC 양방향 예측형) ══════ */
 function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='close'){
   let cash=capital-(initH*initAvg), h=initH, avg=initAvg, cycle=0;
   if(cash<0){cash=capital; h=initH; avg=initAvg;}
@@ -667,8 +667,9 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
     let target_price = null;
     let pending_buy = null, pending_sell = null, pending_stop = false;
     let b1 = 0, s1 = 0, bLabel = '', sLabel = '';
-    let calc_str_today = ''; // 오늘 체결을 위한 산출식 저장
+    let calc_str_today = ''; 
 
+    // 장 시작 전, 어제까지의 데이터로 오늘의 타겟 LOC 가격 계산
     if (last_prices.length >= N - 1) {
       let S = 0;
       for(let j = last_prices.length - (N - 1); j < last_prices.length; j++) S += last_prices[j];
@@ -680,23 +681,26 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
         pending_stop = true;
         s1 = dO; sLabel = 'STOP_LOSS (시가매도)';
       } else {
+        // 🔥 핵심: 보유량이 있으면 똑같은 target_price 로 양방향 주문 세팅!
         if (splits_used < (P.splits || 7)) {
-          pending_buy = target_price; b1 = target_price; bLabel = `BUY (${splits_used+1}/${P.splits||7})`;
+          pending_buy = target_price; b1 = target_price; bLabel = `LOC 추가매수 (${splits_used+1}/${P.splits||7})`;
         }
         if (h > 0) {
-          pending_sell = target_price; s1 = target_price; sLabel = 'SELL (전량 익절)';
+          pending_sell = target_price; s1 = target_price; sLabel = 'LOC 전량익절';
         }
       }
     }
 
+    // 장중 체결 시뮬레이션
     if (pending_stop && h > 0) {
       let ep = dO, qty = h;
       let unit_rev = ep * (1-comm);
       let rev = r2(unit_rev * qty), pnl = r2((unit_rev - avg) * qty);
       h = 0; cash += rev; cycle++; splits_used = 0; days_held = 0;
-      trades.push({date, type:'SELL', label:sLabel, price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC, calc_str: '손절 조건 도달'});
+      trades.push({date, type:'SELL', label:'손절 (시가매도)', price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC, calc_str: '손절 조건 도달'});
     } else {
       
+      // LOC 전량익절 실행 (종가가 지정가 이상일 때)
       if (pending_sell && h > 0) {
         let executed = false, ep = pending_sell;
         if (fillMode === 'close' && dC >= pending_sell) { executed = true; ep = dC; }
@@ -707,10 +711,11 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
           let qty = h, unit_rev = ep * (1-comm);
           let rev = r2(unit_rev * qty), pnl = r2((unit_rev - avg) * qty);
           h = 0; cash += rev; cycle++; splits_used = 0; days_held = 0;
-          trades.push({date, type:'SELL', label:sLabel, price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC, calc_str: calc_str_today});
+          trades.push({date, type:'SELL', label:'LOC 전량익절', price:ep, qty, revenue:rev, pnl:r2(pnl), avg_before:r2(avg), holdings_after:h, day_o:dO, day_h:dH, day_l:dL, day_c:dC, calc_str: calc_str_today});
         }
       }
 
+      // LOC 추가매수 실행 (종가가 지정가 이하일 때)
       if (pending_buy && splits_used < (P.splits || 7)) {
         let executed = false, ep = pending_buy;
         if (fillMode === 'close' && dC <= pending_buy) { executed = true; ep = dC; }
@@ -735,6 +740,7 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
     last_prices.push(dC);
     if(last_prices.length > N - 1) last_prices.shift();
 
+    // 💡 UI 표시를 위한 내일 예측가 도출
     let next_b1 = 0, next_s1 = 0, next_bLabel = '', next_sLabel = '';
     let calc_str = null;
 
@@ -746,13 +752,13 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
       calc_str = `(과거 ${N-1}일 합 <strong>${r2(S_next)}</strong> × ${mult}) / (${N} - ${mult}) = <strong>$${next_target}</strong>`;
 
       if (days_held >= (P.stop_loss_days || 8)) {
-        next_s1 = dC; next_sLabel = 'STOP_LOSS (내일 시가매도)';
+        next_s1 = dC; next_sLabel = 'STOP_LOSS (내일 시가매도 예정)';
       } else {
         if (splits_used < (P.splits || 7)) {
-          next_b1 = next_target; next_bLabel = `BUY (${splits_used+1}/${P.splits||7})`;
+          next_b1 = next_target; next_bLabel = `LOC 추가매수 (${splits_used+1}/${P.splits||7})`;
         }
         if (h > 0) {
-          next_s1 = next_target; next_sLabel = 'SELL (전량 익절)';
+          next_s1 = next_target; next_sLabel = 'LOC 전량익절';
         }
       }
     }
@@ -765,8 +771,9 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
   }
 
   const lastOrd = daily.length > 0 ? daily[daily.length-1].lastOrd : {buys:[], sells:[]};
-  return computeMetrics(daily, trades, capital, cycle, lastOrd, capital);
+  return computeMetrics(daily, trades, capital, cycle, lastOrd, cash);
 }
+
 function computeMetrics(daily, trades, capital, cycle, lastOrd, cs_final) {
   const EQ=daily.map(d=>d.equity), N=EQ.length, DT=daily.map(d=>d.date);
   const validEQ = EQ.filter(v => !isNaN(v));
@@ -911,16 +918,18 @@ function renderSignal(sim,series, strategy){
   const chg=(close/prev-1)*100,chgCls=chg>0?'up':chg<0?'dn':'flat';
   const profCls=last.profit_pct>0?'cg':last.profit_pct<0?'cr':'cy';
   let buyH='',sellH='';
+  
   (orders.buys||[]).forEach(([p,q,l])=>{buyH+=`<div class="oi"><span class="ol">${l}</span><div style="display:flex;align-items:center;gap:7px"><span class="op2 buy">$${p.toFixed(2)}</span><span class="oq">${q}주</span></div></div>`;});
   (orders.sells||[]).forEach(([p,q,l])=>{sellH+=`<div class="oi"><span class="ol">${l}</span><div style="display:flex;align-items:center;gap:7px"><span class="op2 sell">$${p.toFixed(2)}</span><span class="oq">${q}주</span></div></div>`;});
+  
+  if(!buyH)buyH='<div class="no-order">대기중인 매수 없음</div>';
   if(!sellH)sellH='<div class="no-order">보유 없음 — 매도 없음</div>';
   
   const stratName = strategy === 'day3' ? `🎯 ${document.getElementById('p3_ma_days').value}일 종가 예측 매매 시그널` : '📅 Kouya 매매 신호';
   
-  // N일 종가 매매법일 경우 계산식을 UI에 표시
   let calcHtml = '';
   if (strategy === 'day3' && orders.calc_str) {
-    calcHtml = `<div class="calc-box">💡 <b>예측 목표가(LOC) 산출 공식:</b><br>${orders.calc_str}</div>`;
+    calcHtml = `<div class="calc-box">💡 <b>예측 목표가(LOC 양방향 기준가):</b><br>${orders.calc_str}</div>`;
   }
 
   document.getElementById('todayCard').innerHTML=`
@@ -936,11 +945,11 @@ function renderSignal(sim,series, strategy){
       <div class="stat"><div class="sl">총 자산</div><div class="sv cw">$${last.equity.toLocaleString()}</div></div>
     </div>
     <div class="orders-grid">
-      <div class="op"><div class="oh buy">📈 매수 예약 (매도와 동일가)</div>${buyH}</div>
-      <div class="op"><div class="oh sell">📉 매도 예약 (전량)</div>${sellH}</div>
+      <div class="op"><div class="oh buy">📈 매수 주문 (Limit/LOC)</div>${buyH}</div>
+      <div class="op"><div class="oh sell">📉 매도 주문 (Limit/LOC)</div>${sellH}</div>
     </div>`;
 }
-
+  
 function tglSort(){ _trSortDesc = !_trSortDesc; if(SIM) renderTrades(SIM); if(BT_SIM) renderBTTrades(BT_SIM); }
 
 function renderTrades(sim){
