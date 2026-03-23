@@ -220,7 +220,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
         </select>
       </div>
       <div class="field">
-        <label>&nbsp;</label>
+        <label style="visibility:hidden;">실행버튼</label>
         <button class="btn btn-pri btn-full" id="rb" onclick="runBT()">▶ 수동 전체 실행</button>
       </div>
     </div>
@@ -243,7 +243,6 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div id="btTrContent"><div class="ph"><div class="ico">📋</div><div>백테스트 실행 후 표시됩니다</div></div></div>
   </div>
 </div>
-
 <div class="mpane" id="pane-trades">
   <div id="trContent"><div class="ph"><div class="ico">📋</div><div>설정 저장 후 내역이 표시됩니다</div></div></div>
 </div>
@@ -867,7 +866,6 @@ function triggerPreview() {
   // 값이 입력될 때마다 계속 계산하면 렉이 걸리므로, 0.4초 동안 멈추면 한 번만 계산 (디바운싱)
   pvwTimeout = setTimeout(updateYearlyPreview, 400); 
 }
-
 function updateYearlyPreview() {
   const pvw = document.getElementById('yearlyPreview');
   if(!pvw || !PRICES.length) return;
@@ -877,24 +875,24 @@ function updateYearlyPreview() {
     try {
       const s = getCurCfg(); 
       const safeComm = (s.comm !== undefined && !isNaN(s.comm)) ? s.comm : 0;
-      const years = [...new Set(PRICES.map(p => p.date.substring(0, 4)))].slice(-6); // 최근 6년 추출
+      // 💡 slice(-6) 제거: 2011년부터 모든 연도를 다 가져옵니다.
+      const years = [...new Set(PRICES.map(p => p.date.substring(0, 4)))]; 
       
       let html = '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;">';
       
       years.forEach(yr => {
         const series = PRICES.filter(p => p.date.startsWith(yr));
-        if(series.length < 10) return; // 데이터가 너무 적으면 패스
+        if(series.length < 10) return; 
         
         let sim;
-        // 각 연도별로 '초기자본 10000달러' 독립적으로 초기화하여 성과 테스트
         if (s.strategy === 'day3') {
           sim = simulate3Day(series, 10000, safeComm/100, 0, 0, s.params3d, s.fillMode);
         } else {
           sim = simulateKouya(series, 10000, safeComm/100, 0, 0, s.params, s.fillMode);
         }
         
-        const ret = sim.m.tr; // 총 수익률
-        const mdd = sim.m.mdd; // 최대 낙폭
+        const ret = sim.m.tr; 
+        const mdd = sim.m.mdd; 
         const c_ret = ret >= 0 ? 'var(--gr)' : 'var(--rd)';
         const bg = ret >= 0 ? 'rgba(52,211,153,0.05)' : 'rgba(248,113,113,0.05)';
         const bdr = ret >= 0 ? 'rgba(52,211,153,0.2)' : 'rgba(248,113,113,0.2)';
@@ -912,7 +910,7 @@ function updateYearlyPreview() {
     } catch(e) {
       pvw.innerHTML = `<div style="color:var(--rd);font-size:11px;">오류: ${e.message}</div>`;
     }
-  }, 50); // UI 렌더링 렉을 방지하기 위한 비동기 처리
+  }, 50); 
 }
 
 function isRecent(d){const diff=(new Date()-new Date(d))/86400000;return diff<=(new Date().getDay()===1?4:2);}
