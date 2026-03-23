@@ -186,9 +186,9 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="sec-title blue">백테스트 설정
       <span id="btParamTag" style="font-size:9px;color:var(--t3);font-family:var(--mono)"></span>
     </div>
-    <div class="grid-end">
+    <div class="grid-end" style="margin-bottom:16px;">
       <div class="field" style="grid-column:span 2">
-        <label>기간</label>
+        <label>기간 (수동 실행용)</label>
         <div class="drow">
           <div class="field"><input type="date" id="sd"></div>
           <span>~</span>
@@ -205,22 +205,30 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
       <div class="field">
         <label>초기 자본 ($)</label>
-        <input type="number" id="btCap" value="10000" min="100" step="100">
+        <input type="number" id="btCap" value="10000" min="100" step="100" oninput="triggerPreview()">
       </div>
       <div class="field">
         <label>수수료 (%, 편도)</label>
-        <input type="number" id="btComm" value="0" min="0" max="1" step="0.01">
+        <input type="number" id="btComm" value="0" min="0" max="1" step="0.01" oninput="triggerPreview()">
       </div>
       <div class="field">
         <label>체결 방식</label>
-        <select id="btFillMode">
+        <select id="btFillMode" onchange="triggerPreview()">
           <option value="close">종가 (LOC)</option>
           <option value="open">시가 (MOO)</option>
           <option value="limit">지정가 (Limit)</option>
         </select>
       </div>
-      <div style="display:flex;align-items:flex-end;padding-bottom:0">
-        <button class="btn btn-pri btn-full" id="rb" onclick="runBT()">▶ 실행</button>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button class="btn btn-pri btn-full" id="rb" onclick="runBT()">▶ 수동 전체 실행</button>
+      </div>
+    </div>
+
+    <div style="border-top:1px dashed var(--b1); padding-top:16px;">
+      <div style="font-size:11px; color:var(--ac); font-weight:600; margin-bottom:10px; font-family:var(--mono);">⚡ 현재 설정 기반 연도별 요약 (미리보기)</div>
+      <div id="yearlyPreview">
+        <div class="lo" style="padding:10px; flex-direction:row;"><div class="sp" style="display:block; border-top-color:var(--ac)"></div><span style="color:var(--t3);font-size:11px;">성과 계산 중...</span></div>
       </div>
     </div>
   </div>
@@ -297,28 +305,28 @@ tr:hover td{background:rgba(255,255,255,.02)}
     </div>
   </div>
 
-  <div class="sec purple" id="algo-day3" style="display:none; border-color:var(--gr);">
+<div class="sec purple" id="algo-day3" style="display:none; border-color:var(--gr);">
     <div class="sec-title" style="color:var(--gr);">🎯 N일 종가 매매법 파라미터</div>
     <div class="param-grid">
       <div class="pi">
         <div class="pi-lbl" style="color:var(--gr)">N일 평균 (MA)</div>
         <div class="pi-desc">과거 N-1일치 종가 반영</div>
-        <input type="number" id="p3_ma_days" value="3" step="1" min="2" class="pi-inp" style="width:100%">
+        <input type="number" id="p3_ma_days" value="3" step="1" min="2" class="pi-inp" style="width:100%" oninput="triggerPreview()">
       </div>
       <div class="pi">
         <div class="pi-lbl" style="color:var(--gr)">매수/매도 배수</div>
         <div class="pi-desc">목표가 계산 시 (1+p_rate)</div>
-        <input type="number" id="p3_buy_mult" value="1.01" step="0.001" class="pi-inp" style="width:100%">
+        <input type="number" id="p3_buy_mult" value="1.01" step="0.001" class="pi-inp" style="width:100%" oninput="triggerPreview()">
       </div>
       <div class="pi">
         <div class="pi-lbl" style="color:var(--gr)">분할 매수 횟수</div>
         <div class="pi-desc">총 자본을 분할 진입</div>
-        <input type="number" id="p3_splits" value="7" step="1" class="pi-inp" style="width:100%">
+        <input type="number" id="p3_splits" value="7" step="1" class="pi-inp" style="width:100%" oninput="triggerPreview()">
       </div>
       <div class="pi">
         <div class="pi-lbl" style="color:var(--gr)">손절 기준일</div>
         <div class="pi-desc">미체결 장기화 시 시가 매도</div>
-        <input type="number" id="p3_stop_loss" value="8" step="1" class="pi-inp" style="width:100%">
+        <input type="number" id="p3_stop_loss" value="8" step="1" class="pi-inp" style="width:100%" oninput="triggerPreview()">
       </div>
     </div>
     <div style="font-size:10px; color:var(--t3); margin-top:8px; line-height:1.4">
@@ -489,6 +497,7 @@ function tglAlgo() {
   const v = document.getElementById('cfgStrategy').value;
   document.getElementById('algo-kouya').style.display = (v === 'kouya') ? 'block' : 'none';
   document.getElementById('algo-day3').style.display = (v === 'day3') ? 'block' : 'none';
+  triggerPreview(); // 알고리즘 변경 시 미리보기 갱신
 }
 
 function initParamUI(){
@@ -506,7 +515,6 @@ function initParamUI(){
   };
   renderGroup(groups.A,'pgA'); renderGroup(groups.B,'pgB'); renderGroup(groups.C,'pgC'); renderGroup(groups.D,'pgD'); renderGroup(groups.EF,'pgEF');
 }
-
 function onPI(k,v){
   const bv=PRESETS.baseline[k], val=parseFloat(v);
   const diffEl=document.getElementById('pd-'+k), piEl=document.getElementById('pi-'+k);
@@ -515,6 +523,7 @@ function onPI(k,v){
     diffEl.style.color=d>0?'var(--yw)':'var(--or)'; piEl.classList.add('changed');
   }else{diffEl.textContent='';piEl.classList.remove('changed');}
   if(_currentPreset!=='custom'){_currentPreset='custom';refreshPresetUI();}
+  triggerPreview(); // 파라미터 조작 시 미리보기 갱신
 }
 function getCurParams(){const p={};for(const k of Object.keys(PMETA)){const el=document.getElementById('p-'+k);if(el)p[k]=parseFloat(el.value)||PRESETS.baseline[k];}return p;}
 function applyParamsToUI(params){
@@ -525,7 +534,12 @@ function applyParamsToUI(params){
     if(diffEl&&piEl){if(Math.abs(d)>1e-6){diffEl.textContent=(d>=0?'+':'')+d.toFixed(4);diffEl.style.color=d>0?'var(--yw)':'var(--or)';piEl.classList.add('changed');}else{diffEl.textContent='';piEl.classList.remove('changed');}}
   }
 }
-function applyPreset(name,el){_currentPreset=name;if(name!=='custom')applyParamsToUI(PRESETS[name]);refreshPresetUI();}
+function applyPreset(name,el){
+  _currentPreset=name;
+  if(name!=='custom')applyParamsToUI(PRESETS[name]);
+  refreshPresetUI();
+  triggerPreview(); // 프리셋 버튼 클릭 시 미리보기 갱신
+}
 function refreshPresetUI(){
   ['baseline','balanced','aggressive','holy_grail','ai_deep_value','custom'].forEach(n=>{
     const el=document.getElementById('pc-'+n);if(el)el.classList.toggle('active',n===_currentPreset);
@@ -814,69 +828,91 @@ Chart.defaults.color='#64748b';Chart.defaults.borderColor='#1a2133';
 Chart.defaults.font.family="'IBM Plex Mono',monospace";Chart.defaults.font.size=10;
 const CI={};
 
+
 async function init(){
   try{
+    /* ... (기존 데이터 fetch 로직 동일) ... */
     let todayData = null;
-    try{
-      const res=await fetch('data/today.json?t='+Date.now());
-      if(res.ok) todayData=await res.json();
-    }catch{}
-
+    try{ const res=await fetch('data/today.json?t='+Date.now()); if(res.ok) todayData=await res.json(); }catch{}
     if(todayData){
       const L=todayData.date||'';
       document.getElementById('liveDot').className='dot'+(isRecent(L)?'':' stale');
       document.getElementById('updatedAt').textContent=todayData.generated_at||L;
     }
-
-    const CACHE_STORE = 'soxl-prices-v6';
-    let raw = null;
+    const CACHE_STORE = 'soxl-prices-v6'; let raw = null;
     if('caches' in window){
-      try{
-        const cache = await caches.open(CACHE_STORE);
-        await caches.delete(CACHE_STORE); 
-        const res=await fetch('data/prices.json?t='+Date.now());
-        if(!res.ok)throw new Error('prices.json 로드 실패');
-        raw = await res.json();
-        await cache.put('prices-fresh', new Response(JSON.stringify(raw)));
-      } catch(cacheErr){
-        const res=await fetch('data/prices.json?t='+Date.now());
-        raw = await res.json();
-      }
-    } else {
-      const res=await fetch('data/prices.json?t='+Date.now());
-      raw = await res.json();
-    }
-
-    PRICES=raw.map(p=>Array.isArray(p)
-      ?{date:p[0],open:p[1],high:p[2],low:p[3],close:p[4]}
-      :{date:p.date,open:p.open||p.close,high:p.high||p.close,low:p.low||p.close,close:p.close});
+      try{ const cache=await caches.open(CACHE_STORE); await caches.delete(CACHE_STORE); const res=await fetch('data/prices.json?t='+Date.now()); if(!res.ok)throw new Error(); raw=await res.json(); await cache.put('prices-fresh', new Response(JSON.stringify(raw))); } catch(e){ const res=await fetch('data/prices.json?t='+Date.now()); raw=await res.json(); }
+    } else { const res=await fetch('data/prices.json?t='+Date.now()); raw=await res.json(); }
+    PRICES=raw.map(p=>Array.isArray(p)?{date:p[0],open:p[1],high:p[2],low:p[3],close:p[4]}:{date:p.date,open:p.open||p.close,high:p.high||p.close,low:p.low||p.close,close:p.close});
     FIRST=PRICES[0].date;LAST=PRICES[PRICES.length-1].date;
-    
-    if(!todayData){
-      document.getElementById('updatedAt').textContent=LAST;
-      document.getElementById('liveDot').className='dot'+(isRecent(LAST)?'':' stale');
-    }
-
+    if(!todayData){ document.getElementById('updatedAt').textContent=LAST; document.getElementById('liveDot').className='dot'+(isRecent(LAST)?'':' stale'); }
     ['sd','ed'].forEach(id=>{const el=document.getElementById(id);if(el){el.min=FIRST;el.max=LAST;}});
-    const cfgEl=document.getElementById('cfgStart');
-    if(cfgEl){cfgEl.min=FIRST;cfgEl.max='';}
-    document.getElementById('sd').value=FIRST;
-    document.getElementById('ed').value=LAST;
+    const cfgEl=document.getElementById('cfgStart'); if(cfgEl){cfgEl.min=FIRST;cfgEl.max='';}
+    document.getElementById('sd').value=FIRST; document.getElementById('ed').value=LAST;
 
     initParamUI();
+    const s=loadCfg(); if(!s.start)s.start=FIRST;
+    applyCfgToUI(s); updDI(); renderPriceChart(); runSim(s);
 
-    const s=loadCfg();
-    if(!s.start)s.start=FIRST;
-    applyCfgToUI(s);
-    updDI();
-
-    renderPriceChart();
-    runSim(s);
+    triggerPreview(); // 🔥 화면 로딩 완료 후 연도별 미리보기 자동 계산
 
   }catch(e){
-    document.getElementById('todayCard').innerHTML=
-      '<div class="lo" style="color:var(--rd)">⚠ 데이터 로드 실패<br><small style=\'margin-top:6px\'>GitHub Pages 배포 후 data/prices.json이 있어야 합니다</small></div>';
+    document.getElementById('todayCard').innerHTML='<div class="lo" style="color:var(--rd)">⚠ 데이터 로드 실패<br><small style=\'margin-top:6px\'>prices.json 파일이 없습니다.</small></div>';
   }
+}
+
+let pvwTimeout = null;
+function triggerPreview() {
+  clearTimeout(pvwTimeout);
+  // 값이 입력될 때마다 계속 계산하면 렉이 걸리므로, 0.4초 동안 멈추면 한 번만 계산 (디바운싱)
+  pvwTimeout = setTimeout(updateYearlyPreview, 400); 
+}
+
+function updateYearlyPreview() {
+  const pvw = document.getElementById('yearlyPreview');
+  if(!pvw || !PRICES.length) return;
+  pvw.innerHTML = '<div class="lo" style="padding:15px;flex-direction:row;"><div class="sp" style="display:block;border-top-color:var(--ac)"></div><span style="color:var(--t3);font-size:11px;">연도별 시뮬레이션 중...</span></div>';
+
+  setTimeout(() => {
+    try {
+      const s = getCurCfg(); 
+      const safeComm = (s.comm !== undefined && !isNaN(s.comm)) ? s.comm : 0;
+      const years = [...new Set(PRICES.map(p => p.date.substring(0, 4)))].slice(-6); // 최근 6년 추출
+      
+      let html = '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;">';
+      
+      years.forEach(yr => {
+        const series = PRICES.filter(p => p.date.startsWith(yr));
+        if(series.length < 10) return; // 데이터가 너무 적으면 패스
+        
+        let sim;
+        // 각 연도별로 '초기자본 10000달러' 독립적으로 초기화하여 성과 테스트
+        if (s.strategy === 'day3') {
+          sim = simulate3Day(series, 10000, safeComm/100, 0, 0, s.params3d, s.fillMode);
+        } else {
+          sim = simulateKouya(series, 10000, safeComm/100, 0, 0, s.params, s.fillMode);
+        }
+        
+        const ret = sim.m.tr; // 총 수익률
+        const mdd = sim.m.mdd; // 최대 낙폭
+        const c_ret = ret >= 0 ? 'var(--gr)' : 'var(--rd)';
+        const bg = ret >= 0 ? 'rgba(52,211,153,0.05)' : 'rgba(248,113,113,0.05)';
+        const bdr = ret >= 0 ? 'rgba(52,211,153,0.2)' : 'rgba(248,113,113,0.2)';
+        
+        html += `
+          <div style="background:${bg};border:1px solid ${bdr};border-radius:6px;padding:12px 14px;min-width:110px;text-align:center;flex-shrink:0;">
+            <div style="font-family:var(--mono);font-size:11px;color:var(--t1);margin-bottom:6px;font-weight:600;">${yr}년</div>
+            <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:${c_ret};margin-bottom:4px;">${ret>0?'+':''}${ret.toFixed(1)}%</div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--rd);background:rgba(248,113,113,0.1);padding:2px 4px;border-radius:3px;display:inline-block;">MDD ${mdd.toFixed(1)}%</div>
+          </div>
+        `;
+      });
+      html += '</div>';
+      pvw.innerHTML = html;
+    } catch(e) {
+      pvw.innerHTML = `<div style="color:var(--rd);font-size:11px;">오류: ${e.message}</div>`;
+    }
+  }, 50); // UI 렌더링 렉을 방지하기 위한 비동기 처리
 }
 
 function isRecent(d){const diff=(new Date()-new Date(d))/86400000;return diff<=(new Date().getDay()===1?4:2);}
