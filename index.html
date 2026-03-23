@@ -767,6 +767,39 @@ function simulate3Day(series,capital,comm=0,initH=0,initAvg=0,P={},fillMode='clo
   const lastOrd = daily.length > 0 ? daily[daily.length-1].lastOrd : {buys:[], sells:[]};
   return computeMetrics(daily, trades, capital, cycle, lastOrd, capital);
 }
+function computeMetrics(daily, trades, capital, cycle, lastOrd, cs_final) {
+  const EQ=daily.map(d=>d.equity), N=EQ.length, DT=daily.map(d=>d.date);
+  const validEQ = EQ.filter(v => !isNaN(v));
+  const maxEQ = validEQ.length > 0 ? Math.max(...validEQ) : 0;
+  const minEQ = validEQ.length > 0 ? Math.min(...validEQ) : 0;
+  
+  const mdd= maxEQ > 0 ? -r2((maxEQ-minEQ)/maxEQ*100) : 0;
+  const maxIdx = EQ.indexOf(maxEQ), minIdx = EQ.indexOf(minEQ);
+  const mPk = maxIdx >= 0 ? DT[maxIdx] : '', mTr = minIdx >= 0 ? DT[minIdx] : '';
+  
+  let _pk=EQ[0]||0;
+  const DD=EQ.map((eq)=>{if(eq>_pk)_pk=eq;return _pk>0 ? r2((eq/_pk-1)*100) : 0;});
+  const DR=EQ.slice(1).map((eq,i)=>(EQ[i]>0 ? r2((eq/EQ[i]-1)*100) : 0));
+  
+  const monthly={};
+  daily.forEach(d=>{
+    const ym=d.date.slice(0,7);
+    if(!monthly[ym])monthly[ym]={sEq:d.equity,eEq:d.equity,sCl:d.price,eCl:d.price};
+    monthly[ym].eEq=d.equity; monthly[ym].eCl=d.price;
+  });
+  
+  const init=capital, fin=EQ[N-1]||init;
+  const sells=trades.filter(t=>t.type==='SELL'), pnls=sells.map(t=>t.pnl||0);
+  const win=pnls.filter(p=>p>0).length, lose=pnls.filter(p=>p<=0).length;
+  const avgR=DR.reduce((a,b)=>a+b,0)/Math.max(DR.length,1)/100;
+  const stdR=Math.sqrt(DR.reduce((s,v)=>s+(v/100-avgR)**2,0)/Math.max(DR.length-1,1));
+  const sharpe=stdR>0?r2(avgR/stdR*Math.sqrt(252)):0;
+  
+  return {
+    m:{tr:r2((fin/init-1)*100),cagr:init>0&&fin>0?r2(((fin/init)**(252/Math.max(N,1))-1)*100):0,mdd,mPk,mTr,sharpe,fin:r2(fin),init,nD:N,cy:cycle,nB:trades.filter(t=>t.type==='BUY').length,nS:sells.length,win,lose,wr:r2(win/Math.max(pnls.length,1)*100)},
+    EQ,DT,DD,DR,trades,daily,monthly,last:daily[daily.length-1],lastOrd,cs_final
+  };
+}
 
 
 /* ══════ 초기화 및 실행 ══════ */
