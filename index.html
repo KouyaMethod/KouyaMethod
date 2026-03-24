@@ -334,12 +334,13 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </div>
     
-    <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--b2);">
+     <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--b2);">
       <button class="btn btn-pur btn-full" id="btnOpt" onclick="runMobileOptimizer()">🚀 모바일 AI 자동 최적화 (터치 시 실행)</button>
-      <div id="optConsole" style="display:none; margin-top:10px; background:#080b10; border:1px solid var(--b2); border-radius:6px; padding:12px; font-family:var(--mono); font-size:11px; color:var(--gr); height:120px; overflow-y:auto; line-height:1.6;">
+      <div id="optConsole" style="display:none; margin-top:10px; background:#080b10; border:1px solid var(--b2); border-radius:6px; padding:12px; font-family:var(--mono); font-size:11px; color:var(--gr); min-height:140px; overflow-y:auto; line-height:1.6;">
         대기 중...
       </div>
     </div>
+
   </div>
 
 
@@ -1199,7 +1200,7 @@ function updDI(){
   const s=document.getElementById('sd').value,e=document.getElementById('ed').value;
   document.getElementById('di').textContent=`→ ${PRICES.filter(p=>p.date>=s&&p.date<=e).length} 거래일`;
 }
-  /* ══════ 모바일 전용 AI 파라미터 최적화 엔진 ══════ */
+/* ══════ 모바일 전용 AI 파라미터 최적화 엔진 (다중 목표 추적형) ══════ */
 async function runMobileOptimizer() {
   const btn = document.getElementById('btnOpt');
   const con = document.getElementById('optConsole');
@@ -1210,13 +1211,12 @@ async function runMobileOptimizer() {
   con.style.display = "block";
   con.innerHTML = "데이터 분석 준비 중...<br>";
 
-  // 현재 화면에 설정된 티커(USD/SOXL 등)의 전체 연도 추출
   const years = [...new Set(PRICES.map(p => p.date.substring(0, 4)))];
   const s = getCurCfg();
   const safeComm = (s.comm !== undefined && !isNaN(s.comm)) ? s.comm : 0;
   const fillMode = s.fillMode || 'close';
 
-  // 독립 연도별 평가 함수 (1만 달러 초기화)
+  // 연도별 평균 성과 측정 함수
   function evaluate(P) {
     let sumTR = 0, sumMDD = 0, validYears = 0;
     for (let yr of years) {
@@ -1231,26 +1231,21 @@ async function runMobileOptimizer() {
     return { avgTR: sumTR / validYears, avgMDD: sumMDD / validYears };
   }
 
-  // 1. 디폴트(기존) 성과 측정
-  const defP = { ma_days: 3, buy_mult: 1.75, sell_mult: 0.75, splits: 7, stop_loss_days: 8 };
-  const defRes = evaluate(defP);
-  con.innerHTML = `📌 <b>[기존 기본값 기준점]</b><br>평균 연수익: ${defRes.avgTR.toFixed(2)}% | 평균 MDD: -${defRes.avgMDD.toFixed(2)}%<br>탐색을 시작합니다...<br><br>`;
+  // 추적할 3가지 최고 기록 변수 초기화
+  let bestScore = -9999, bestParams = null, bestRes = null;    // 밸런스형 (MDD 40 언더 중 점수 최고)
+  let maxTR = -9999, maxTRParams = null, maxTRRes = null;      // 수익올인형 (수익률 극대화)
+  let minMDD = 9999, minMDDParams = null, minMDDRes = null;    // 방어올인형 (MDD 극도 방어)
 
-  let bestScore = -9999;
-  let bestParams = null;
-  let bestRes = null;
-  let foundCount = 0;
-  const iterations = 10000; // 모바일 브라우저 렉 방지를 위해 1만 번으로 셋팅
+  const iterations = 10000; 
   let i = 0;
 
-  // 2. 비동기 쪼개기 처리 (브라우저 뻗음 방지)
   function processChunk() {
-    let limit = Math.min(i + 150, iterations); // 한 번에 150번씩 계산
+    let limit = Math.min(i + 150, iterations); 
     for (; i < limit; i++) {
       let P = {
         ma_days: Math.floor(Math.random() * 14) + 2, // 2 ~ 15일
-        buy_mult: parseFloat((1.0 + Math.random() * 1.5).toFixed(2)), // 1.0 ~ 2.5
-        sell_mult: parseFloat((0.5 + Math.random() * 0.5).toFixed(2)), // 0.5 ~ 1.0
+        buy_mult: parseFloat((1.0 + Math.random() * 1.5).toFixed(2)), // 1.00 ~ 2.50
+        sell_mult: parseFloat((0.5 + Math.random() * 0.5).toFixed(2)), // 0.50 ~ 1.00
         splits: Math.floor(Math.random() * 14) + 2, // 2 ~ 15분할
         stop_loss_days: Math.floor(Math.random() * 20) + 3 // 3 ~ 23일
       };
@@ -1258,56 +1253,88 @@ async function runMobileOptimizer() {
       let res = evaluate(P);
       if (!res) continue;
 
-      // 💡 기준점(디폴트)을 이기고, 기존에 찾은 최고 점수보다 높을 때 갱신
-      if (res.avgTR > defRes.avgTR && res.avgMDD < defRes.avgMDD) {
-        let score = res.avgTR - (res.avgMDD * 1.5); // MDD 방어에 가중치 부여
-        if (score > bestScore) {
-          bestScore = score;
-          bestParams = P;
-          bestRes = res;
-          foundCount++;
+      // 💡 [조건 1] 밸런스형: MDD 40 이하면 정상 계산, 40 이상이면 점수 대폭 삭감(x4)
+      let mddPenalty = res.avgMDD >= 40 ? (res.avgMDD * 4) : res.avgMDD;
+      let score = res.avgTR - mddPenalty;
+
+      // 기본적으로 수익이 10% 이상은 나와야 의미 있는 전략으로 취급
+      if (res.avgTR > 10) {
+        // 👑 최고 밸런스 갱신
+        if (score > bestScore && res.avgMDD < 45) {
+          bestScore = score; bestParams = P; bestRes = res;
+        }
+        // 🔥 최고 수익률 갱신 (MDD가 60%를 넘는 비현실적 전략은 제외)
+        if (res.avgTR > maxTR && res.avgMDD < 60) {
+          maxTR = res.avgTR; maxTRParams = P; maxTRRes = res;
+        }
+        // 🛡️ 최강 방어력 갱신 (MDD 최소화)
+        if (res.avgMDD < minMDD) {
+          minMDD = res.avgMDD; minMDDParams = P; minMDDRes = res;
         }
       }
     }
 
-    if (bestParams) {
-      con.innerHTML = `진행률: ${i}/${iterations}<br>👑 <b>최고 효율 발견! (총 ${foundCount}건)</b><br>수익: <span style="color:var(--gr)">${bestRes.avgTR.toFixed(2)}%</span> | MDD: <span style="color:var(--rd)">-${bestRes.avgMDD.toFixed(2)}%</span><br>MA: ${bestParams.ma_days}일 | B: ${bestParams.buy_mult} | S: ${bestParams.sell_mult}`;
-    } else {
-      con.innerHTML = `진행률: ${i}/${iterations}<br>아직 기준점(수익 ${defRes.avgTR.toFixed(1)}%, MDD -${defRes.avgMDD.toFixed(1)}%)을 넘는 설정을 찾는 중...`;
-    }
+    // 화면 실시간 로그 업데이트
+    let logStr = `<div style="color:var(--t3);margin-bottom:8px">탐색 진행률: ${i}/${iterations}</div>`;
+    if(bestParams) logStr += `👑 <b>밸런스:</b> 수익 ${bestRes.avgTR.toFixed(1)}% | MDD -${bestRes.avgMDD.toFixed(1)}%<br>`;
+    if(maxTRParams) logStr += `🔥 <b>수익극대:</b> <span style="color:var(--gr)">수익 ${maxTRRes.avgTR.toFixed(1)}%</span> | MDD -${maxTRRes.avgMDD.toFixed(1)}%<br>`;
+    if(minMDDParams) logStr += `🛡️ <b>방어극대:</b> 수익 ${minMDDRes.avgTR.toFixed(1)}% | <span style="color:var(--ac)">MDD -${minMDDRes.avgMDD.toFixed(1)}%</span><br>`;
+    
+    con.innerHTML = logStr;
 
-    // 다음 루프 실행
+    // 다음 청크로 넘어가거나 종료 처리
     if (i < iterations) {
       setTimeout(processChunk, 0); 
     } else {
-      // 탐색 완전 종료
       btn.disabled = false;
-      btn.textContent = "🚀 모바일 자동 최적화 (다시 실행)";
+      btn.textContent = "🚀 모바일 AI 자동 최적화 (다시 실행)";
+      
+      // 결과 버튼 UI 렌더링
       if (bestParams) {
-        window.optBestParams = bestParams; // 전역 변수에 저장
-        con.innerHTML = `✅ <b>탐색 완료!</b><br>최고 연평균 수익: <span style="color:var(--gr)">${bestRes.avgTR.toFixed(2)}%</span><br>최대 낙폭 방어: <span style="color:var(--rd)">-${bestRes.avgMDD.toFixed(2)}%</span><br>
-        <button class="btn btn-pri" style="margin-top:8px; height:28px; font-size:11px;" onclick="applyOptParams()">이 설정 바로 폼에 적용하기</button>`;
+        window.optBestParams = bestParams;
+        window.optMaxTRParams = maxTRParams;
+        window.optMinMDDParams = minMDDParams;
+
+        con.innerHTML = `
+          <div style="margin-bottom:8px;color:#fff;">✅ <b>탐색 완료! 원하는 성향을 선택하세요.</b></div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <button class="btn" style="background:#1a2133;color:var(--t1);font-size:11px;padding:6px;height:auto;justify-content:flex-start;" onclick="applyOptParams('best')">
+              👑 <b>황금 밸런스</b> (MDD 40 언더 최고점)<br>수익 ${bestRes.avgTR.toFixed(1)}% / MDD -${bestRes.avgMDD.toFixed(1)}%
+            </button>
+            <button class="btn" style="background:rgba(52,211,153,0.1);color:var(--gr);font-size:11px;padding:6px;height:auto;border:1px solid rgba(52,211,153,0.3);justify-content:flex-start;" onclick="applyOptParams('maxTR')">
+              🔥 <b>수익 올인형</b> (리스크 감수)<br>수익 ${maxTRRes.avgTR.toFixed(1)}% / MDD -${maxTRRes.avgMDD.toFixed(1)}%
+            </button>
+            <button class="btn" style="background:rgba(56,189,248,0.1);color:var(--ac);font-size:11px;padding:6px;height:auto;border:1px solid rgba(56,189,248,0.3);justify-content:flex-start;" onclick="applyOptParams('minMDD')">
+              🛡️ <b>방어 올인형</b> (초안전 지향)<br>수익 ${minMDDRes.avgTR.toFixed(1)}% / MDD -${minMDDRes.avgMDD.toFixed(1)}%
+            </button>
+          </div>
+        `;
       } else {
-        con.innerHTML = `✅ 탐색 완료.<br>아쉽게도 기존 1.75/0.75 배수 설정을 완벽하게 이기는 조합을 찾지 못했습니다.`;
+        con.innerHTML = `✅ 탐색 완료.<br>유의미한 성과를 내는 파라미터를 찾지 못했습니다.`;
       }
     }
   }
 
-  // 첫 번째 루프 시작
+  // 탐색 시작
   setTimeout(processChunk, 10);
 }
 
-// 찾은 파라미터를 입력창에 원클릭으로 쏴주는 함수
-function applyOptParams() {
-  if(!window.optBestParams) return;
-  let P = window.optBestParams;
+// 💡 3가지 버튼 중 선택한 성향의 파라미터를 입력창에 적용하는 함수
+function applyOptParams(type) {
+  let P = null;
+  if(type === 'best') P = window.optBestParams;
+  if(type === 'maxTR') P = window.optMaxTRParams;
+  if(type === 'minMDD') P = window.optMinMDDParams;
+
+  if(!P) return;
   document.getElementById('p3_ma_days').value = P.ma_days;
   document.getElementById('p3_buy_mult').value = P.buy_mult;
   document.getElementById('p3_sell_mult').value = P.sell_mult;
   document.getElementById('p3_splits').value = P.splits;
   document.getElementById('p3_stop_loss').value = P.stop_loss_days;
+  
   triggerPreview(); // 즉시 연도별 미리보기 연동
-  alert('최적화된 성배 파라미터가 적용되었습니다!');
+  alert('선택하신 최적화 파라미터가 폼에 적용되었습니다!\n우측 하단의 [저장 & 재계산]을 눌러 전체 백테스트를 확인해보세요.');
 }
 
 init();
