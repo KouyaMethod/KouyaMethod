@@ -859,37 +859,48 @@ Chart.defaults.font.family="'IBM Plex Mono',monospace";Chart.defaults.font.size=
 const CI={};
 
 
-async function init(){
-  try{
-    /* ... (기존 데이터 fetch 로직 동일) ... */
+/* ══════ 초기화 및 실행 (다중 종목 동적 로드 적용) ══════ */
+async function init() {
+  try {
     let todayData = null;
-    try{ const res=await fetch('data/today.json?t='+Date.now()); if(res.ok) todayData=await res.json(); }catch{}
-    if(todayData){
-      const L=todayData.date||'';
-      document.getElementById('liveDot').className='dot'+(isRecent(L)?'':' stale');
-      document.getElementById('updatedAt').textContent=todayData.generated_at||L;
+    try {
+      const res = await fetch('data/today.json?t=' + Date.now());
+      if (res.ok) todayData = await res.json();
+    } catch {}
+
+    if (todayData) {
+      const L = todayData.date || '';
+      document.getElementById('liveDot').className = 'dot' + (isRecent(L) ? '' : ' stale');
+      document.getElementById('updatedAt').textContent = todayData.generated_at || L;
     }
-    const CACHE_STORE = 'soxl-prices-v6'; let raw = null;
-    if('caches' in window){
-      try{ const cache=await caches.open(CACHE_STORE); await caches.delete(CACHE_STORE); const res=await fetch('data/prices.json?t='+Date.now()); if(!res.ok)throw new Error(); raw=await res.json(); await cache.put('prices-fresh', new Response(JSON.stringify(raw))); } catch(e){ const res=await fetch('data/prices.json?t='+Date.now()); raw=await res.json(); }
-    } else { const res=await fetch('data/prices.json?t='+Date.now()); raw=await res.json(); }
-    PRICES=raw.map(p=>Array.isArray(p)?{date:p[0],open:p[1],high:p[2],low:p[3],close:p[4]}:{date:p.date,open:p.open||p.close,high:p.high||p.close,low:p.low||p.close,close:p.close});
-    FIRST=PRICES[0].date;LAST=PRICES[PRICES.length-1].date;
-    if(!todayData){ document.getElementById('updatedAt').textContent=LAST; document.getElementById('liveDot').className='dot'+(isRecent(LAST)?'':' stale'); }
-    ['sd','ed'].forEach(id=>{const el=document.getElementById(id);if(el){el.min=FIRST;el.max=LAST;}});
-    const cfgEl=document.getElementById('cfgStart'); if(cfgEl){cfgEl.min=FIRST;cfgEl.max='';}
-    document.getElementById('sd').value=FIRST; document.getElementById('ed').value=LAST;
 
+    // 1. UI 및 저장된 설정 먼저 불러오기
     initParamUI();
-    const s=loadCfg(); if(!s.start)s.start=FIRST;
-    applyCfgToUI(s); updDI(); renderPriceChart(); runSim(s);
+    const s = loadCfg();
+    applyCfgToUI(s);
 
-    triggerPreview(); // 🔥 화면 로딩 완료 후 연도별 미리보기 자동 계산
+    // 2. 🔥 prices.json 대신, 설정된 티커(기본 SOXL) 데이터를 동적으로 불러옵니다!
+    const targetTicker = s.ticker || 'SOXL';
+    await loadTickerData(targetTicker);
 
-  }catch(e){
-    document.getElementById('todayCard').innerHTML='<div class="lo" style="color:var(--rd)">⚠ 데이터 로드 실패<br><small style=\'margin-top:6px\'>prices.json 파일이 없습니다.</small></div>';
+    // 3. 데이터가 성공적으로 로드되었다면 백테스트 및 뷰 렌더링 실행
+    if (PRICES.length > 0) {
+      if (!s.start || s.start < FIRST) s.start = FIRST;
+      document.getElementById('cfgStart').value = s.start;
+      document.getElementById('sd').value = FIRST;
+      document.getElementById('ed').value = LAST;
+      
+      updDI();
+      runSim(s);
+      triggerPreview(); // 연도별 미리보기 실행
+    }
+
+  } catch (e) {
+    document.getElementById('todayCard').innerHTML =
+      `<div class="lo" style="color:var(--rd)">⚠ 시스템 초기화 실패<br><small style='margin-top:6px'>${e.message}</small></div>`;
   }
 }
+
 
 let pvwTimeout = null;
 function triggerPreview() {
