@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-08-08 07:03 KST",
-  "date": "2026-08-07",
-  "close": 140.25,
-  "day_change": 5.99,
+  "generated_at": "2026-08-11 06:12 KST",
+  "date": "2026-08-10",
+  "close": 130.0,
+  "day_change": -7.31,
   "cycle_start": 10000.0,
   "avg_price": 0.0,
   "holdings": 0,
@@ -15,12 +15,12 @@
   "orders": {
     "buy": [
       {
-        "price": 162.41,
-        "qty": 4,
+        "price": 150.54,
+        "qty": 5,
         "label": "BUY1"
       },
       {
-        "price": 139.83,
+        "price": 129.61,
         "qty": 5,
         "label": "BUY2"
       }
